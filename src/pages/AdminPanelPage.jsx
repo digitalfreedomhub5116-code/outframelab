@@ -1551,9 +1551,19 @@ export default function AdminPanelPage() {
                                     </a>
                                   </div>
 
-                                  <span className="text-[10px] text-cream-muted/50">
-                                    {order.courier_partner || 'Shiprocket Logistics'}
-                                  </span>
+                                  <div className="flex items-center justify-end gap-2 mt-0.5">
+                                    <span className="text-[10px] text-cream-muted/50">
+                                      {order.courier_partner || 'Shiprocket Logistics'}
+                                    </span>
+                                    <span className="text-cream-muted/30">·</span>
+                                    <button
+                                      onClick={() => handleGenerateAwb(order.id)}
+                                      className="text-[10px] text-gold/80 hover:text-gold hover:underline cursor-pointer font-medium"
+                                      title="Re-request or regenerate AWB through Shiprocket"
+                                    >
+                                      Regenerate
+                                    </button>
+                                  </div>
                                 </div>
                               ) : (
                                 <button

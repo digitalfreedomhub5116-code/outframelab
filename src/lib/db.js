@@ -117,7 +117,6 @@ export async function saveProduct(product) {
 // ── 2. ORDERS & SHIPROCKET LIVE TRACKING ──
 export async function createOrder(orderPayload) {
   const orderNumber = 'OFL-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000)
-  const awbCode = 'DL' + Math.floor(100000000 + Math.random() * 900000000)
   const estimatedDelivery = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
 
   const initialTrackingEvents = [
@@ -138,9 +137,9 @@ export async function createOrder(orderPayload) {
   ]
 
   const shipmentData = {
-    courier_partner: 'Delhivery Air (Express)',
-    awb_code: awbCode,
-    tracking_url: `https://www.delhivery.com/track/package/${awbCode}`,
+    courier_partner: null,
+    awb_code: null,
+    tracking_url: null,
     status: 'CONFIRMED',
     estimated_delivery: estimatedDelivery,
   }
