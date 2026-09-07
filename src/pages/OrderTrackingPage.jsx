@@ -16,7 +16,6 @@ import {
   ShoppingBag,
   RefreshCw,
   User,
-  ShieldCheck,
   Sparkles
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
@@ -29,8 +28,7 @@ import {
   getOrdersByPhone,
   getUserOrders,
   getCurrentCustomer,
-  initAuthListener,
-  advanceOrderStatus
+  initAuthListener
 } from '../lib/db'
 
 export default function OrderTrackingPage() {
@@ -45,7 +43,7 @@ export default function OrderTrackingPage() {
   const [userOrders, setUserOrders] = useState([])
   const [ordersLoading, setOrdersLoading] = useState(true)
 
-  // Search / Single Order State
+  // Search State
   const [query, setQuery] = useState(initialOrderId)
   const [searchedOrder, setSearchedOrder] = useState(null)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -55,13 +53,50 @@ export default function OrderTrackingPage() {
   const [expandedOrders, setExpandedOrders] = useState({})
   const [copiedAwb, setCopiedAwb] = useState(null)
 
+  // 6 Checkpoints matching Outframe Labs fulfillment pipeline
   const STAGES = [
-    { key: 'PLACED', label: 'Order Placed', desc: 'Payment verified' },
-    { key: 'CONFIRMED', label: 'Confirmed', desc: 'Crafting & Gold Patina' },
-    { key: 'PACKED', label: 'Packed', desc: 'Quality inspected' },
-    { key: 'SHIPPED', label: 'Shipped', desc: 'In Courier transit' },
-    { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery', desc: 'Arriving today' },
-    { key: 'DELIVERED', label: 'Delivered', desc: 'Package received' },
+    {
+      key: 'PLACED',
+      step: '01',
+      label: 'Order Placed',
+      desc: 'Order verified and securely registered in system',
+      icon: CheckCircle2,
+    },
+    {
+      key: 'CONFIRMED',
+      step: '02',
+      label: 'Confirmed & Crafted',
+      desc: 'Keychain 3D sculpted with authentic Antique Gold Patina finish',
+      icon: Sparkles,
+    },
+    {
+      key: 'PACKED',
+      step: '03',
+      label: 'Packed in Collector Tin',
+      desc: 'Carefully inspected and sealed in signature Outframe collector tin box',
+      icon: Package,
+    },
+    {
+      key: 'SHIPPED',
+      step: '04',
+      label: 'Shipped & In Transit',
+      desc: 'Handed over to courier partner (Delhivery Express) for express air transit',
+      icon: Truck,
+    },
+    {
+      key: 'OUT_FOR_DELIVERY',
+      step: '05',
+      label: 'Out for Delivery',
+      desc: 'Package is out with courier delivery executive for doorstep handover',
+      icon: MapPin,
+    },
+    {
+      key: 'DELIVERED',
+      step: '06',
+      label: 'Delivered',
+      desc: 'Safely delivered to customer address with signature verification',
+      icon: Check,
+    },
   ]
 
   const getStageIndex = (status) => {
@@ -95,7 +130,7 @@ export default function OrderTrackingPage() {
     loadOrders(currentUser)
   }, [currentUser])
 
-  // Search Single Order
+  // Search Single Order (for guest or specific ID lookup)
   const fetchSingleOrder = async (idToSearch) => {
     if (!idToSearch) return
     setSearchLoading(true)
@@ -110,8 +145,6 @@ export default function OrderTrackingPage() {
 
       if (res) {
         setSearchedOrder(res)
-        // Automatically expand the searched order
-        setExpandedOrders((prev) => ({ ...prev, [res.order_number]: true }))
       } else {
         setSearchedOrder(null)
         setNotFound(true)
@@ -156,25 +189,28 @@ export default function OrderTrackingPage() {
     setTimeout(() => setCopiedAwb(null), 2000)
   }
 
-  const handleAdvanceStatus = (orderNumber) => {
-    const updated = advanceOrderStatus(orderNumber)
-    if (updated) {
-      // Update in searched order if applicable
-      if (searchedOrder?.order_number === orderNumber) {
-        setSearchedOrder({ ...updated })
-      }
-      // Update in user orders list
-      setUserOrders((prev) =>
-        prev.map((o) => (o.order_number === orderNumber ? { ...updated } : o))
+  // Unified list of orders to display (NEVER duplicate sections)
+  const displayedOrders = (() => {
+    const cleanQ = query.trim().toUpperCase()
+    if (cleanQ) {
+      const matched = userOrders.filter(
+        (o) =>
+          o.order_number?.toUpperCase().includes(cleanQ) ||
+          (o.customer_phone && o.customer_phone.replace(/[^0-9]/g, '').includes(cleanQ))
       )
+      if (matched.length > 0) return matched
+      if (searchedOrder) return [searchedOrder]
+      return []
     }
-  }
+    // If no active search query, return all user orders
+    return userOrders
+  })()
 
   return (
     <div className="min-h-screen bg-obsidian text-cream selection:bg-gold selection:text-obsidian flex flex-col justify-between">
       <Navbar />
 
-      <main className="mx-auto max-w-5xl w-full px-4 sm:px-6 lg:px-8 pt-24 pb-20">
+      <main className="mx-auto max-w-4xl w-full px-4 sm:px-6 lg:px-8 pt-24 pb-20">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-cream-muted/60 mb-6">
           <Link to="/" className="hover:text-gold transition-colors">Home</Link>
@@ -191,7 +227,7 @@ export default function OrderTrackingPage() {
             Orders & Live Tracking
           </h1>
           <p className="mt-2 text-xs sm:text-sm text-cream-muted/80">
-            Track your 3D-sculpted antique gold keychains in real-time from our Maharashtra studio to your doorstep.
+            Track your 3D-sculpted antique gold keychains step-by-step from studio crafting to doorstep delivery.
           </p>
 
           {/* Search Form */}
@@ -202,7 +238,7 @@ export default function OrderTrackingPage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g. OFL-2026-1049 or Mobile No."
+                placeholder="Search by Order ID or Mobile No."
                 className="w-full rounded-full border border-gold/30 bg-charcoal/80 pl-10 pr-4 py-3 text-xs sm:text-sm text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/40 shadow-lg shadow-black/50"
               />
             </div>
@@ -238,7 +274,7 @@ export default function OrderTrackingPage() {
                 <>
                   <p className="text-sm font-bold text-cream">Guest Collector</p>
                   <p className="text-xs text-cream-muted/70">
-                    Sign in to automatically sync and access all your past and active orders forever.
+                    Sign in to automatically access and track all your past and active orders forever.
                   </p>
                 </>
               )}
@@ -248,7 +284,7 @@ export default function OrderTrackingPage() {
           <div className="flex items-center gap-3 shrink-0">
             {currentUser ? (
               <span className="text-xs font-bold text-gold px-3 py-1 rounded-full bg-gold/15 border border-gold/30">
-                {userOrders.length} {userOrders.length === 1 ? 'Order' : 'Orders'} Found
+                {displayedOrders.length} {displayedOrders.length === 1 ? 'Order' : 'Orders'}
               </span>
             ) : (
               <button
@@ -268,58 +304,32 @@ export default function OrderTrackingPage() {
             <Package className="h-12 w-12 text-cream-muted/30 mx-auto mb-3" />
             <h3 className="font-heading text-lg font-bold text-cream">Order Not Found</h3>
             <p className="mt-1 text-xs text-cream-muted/70">
-              We couldn't find an order matching "{query}". Please double-check your Order Number or phone number.
+              We couldn't find an order matching "{query}". Please check your Order ID or phone number.
             </p>
           </div>
         )}
 
         {/* ═════════════════════════════════════════════════════════════
-            SEARCHED ORDER DEEP-DIVE (IF SPECIFIC ORDER SEARCHED)
+            ALL YOUR ORDERS (SINGLE UNIFIED SECTION — ONE BELOW THE OTHER)
         ═════════════════════════════════════════════════════════════ */}
-        {searchedOrder && (
-          <div className="mb-10 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-heading text-lg font-bold text-gold flex items-center gap-2">
-                <Sparkles className="h-4 w-4" /> Searched Order Result
-              </h2>
-              <button
-                onClick={() => {
-                  setSearchedOrder(null)
-                  setQuery('')
-                  setSearchParams({})
-                }}
-                className="text-xs text-cream-muted hover:text-cream underline cursor-pointer"
-              >
-                Clear Search & View All
-              </button>
-            </div>
-
-            <OrderCard
-              order={searchedOrder}
-              isExpanded={Boolean(expandedOrders[searchedOrder.order_number])}
-              onToggleExpand={() => toggleExpand(searchedOrder.order_number)}
-              onCopyAwb={handleCopyAwb}
-              copiedAwb={copiedAwb}
-              onAdvanceStatus={() => handleAdvanceStatus(searchedOrder.order_number)}
-              STAGES={STAGES}
-              getStageIndex={getStageIndex}
-            />
-          </div>
-        )}
-
-        {/* ═════════════════════════════════════════════════════════════
-            ALL USER ORDERS (LISTED ONE BELOW THE OTHER)
-        ═════════════════════════════════════════════════════════════ */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between pb-2 border-b border-charcoal-light/70">
             <h2 className="font-heading text-xl font-bold text-cream flex items-center gap-2">
               <Package className="h-5 w-5 text-gold" />
               <span>All Your Orders</span>
             </h2>
-            {userOrders.length > 0 && (
-              <span className="text-xs text-cream-muted/70">
-                Sorted by most recent
-              </span>
+            {query.trim() && (
+              <button
+                onClick={() => {
+                  setQuery('')
+                  setSearchedOrder(null)
+                  setNotFound(false)
+                  setSearchParams({})
+                }}
+                className="text-xs text-gold hover:underline cursor-pointer"
+              >
+                Clear Search & Show All
+              </button>
             )}
           </div>
 
@@ -328,7 +338,7 @@ export default function OrderTrackingPage() {
               <RefreshCw className="h-8 w-8 text-gold animate-spin mx-auto mb-3" />
               <p className="text-sm text-cream-muted">Loading your orders & live statuses...</p>
             </div>
-          ) : userOrders.length === 0 ? (
+          ) : displayedOrders.length === 0 && !notFound ? (
             /* Empty State */
             <div className="rounded-2xl border border-gold/20 bg-charcoal/60 p-10 text-center space-y-3">
               <ShoppingBag className="h-12 w-12 text-gold/60 mx-auto" />
@@ -346,8 +356,8 @@ export default function OrderTrackingPage() {
             </div>
           ) : (
             /* List of Orders One Below the Other */
-            <div className="space-y-6">
-              {userOrders.map((ord) => (
+            <div className="space-y-8">
+              {displayedOrders.map((ord) => (
                 <OrderCard
                   key={ord.order_number || ord.id}
                   order={ord}
@@ -355,7 +365,6 @@ export default function OrderTrackingPage() {
                   onToggleExpand={() => toggleExpand(ord.order_number)}
                   onCopyAwb={handleCopyAwb}
                   copiedAwb={copiedAwb}
-                  onAdvanceStatus={() => handleAdvanceStatus(ord.order_number)}
                   STAGES={STAGES}
                   getStageIndex={getStageIndex}
                 />
@@ -373,14 +382,13 @@ export default function OrderTrackingPage() {
   )
 }
 
-// ── COMPONENT: SINGLE ORDER CARD (One Below Other) ──
+// ── COMPONENT: SINGLE ORDER CARD (One Below Other with Vertical Checkpoints) ──
 function OrderCard({
   order,
   isExpanded,
   onToggleExpand,
   onCopyAwb,
   copiedAwb,
-  onAdvanceStatus,
   STAGES,
   getStageIndex
 }) {
@@ -435,16 +443,16 @@ function OrderCard({
   const badge = getStatusBadge(order.status)
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-charcoal/80 shadow-xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-gold/40">
+    <div className="rounded-2xl border border-gold/25 bg-charcoal/80 shadow-2xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-gold/45">
       {/* ── 1. Top Order Summary Header ── */}
-      <div className="border-b border-charcoal-light/70 bg-obsidian/80 px-5 py-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="border-b border-charcoal-light/70 bg-obsidian/85 px-5 py-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
           <span className="font-heading text-base font-extrabold text-cream tracking-wide">
             {order.order_number}
           </span>
-          <span className="text-cream-muted/60">·</span>
+          <span className="text-cream-muted/50">·</span>
           <span className="text-cream-muted/70">Placed {formattedDate}</span>
-          <span className="text-cream-muted/60">·</span>
+          <span className="text-cream-muted/50">·</span>
           <span className="text-cream-muted/80">Recipient: <strong className="text-cream">{order.customer_name}</strong></span>
         </div>
 
@@ -458,110 +466,154 @@ function OrderCard({
         </div>
       </div>
 
-      {/* ── 2. Main Product(s) Display (With Image, Name on Side, and Status Below) ── */}
       <div className="p-5 sm:p-6 space-y-6">
-        {items.length === 0 ? (
-          <div className="flex items-center gap-4">
-            <div className="h-20 w-20 rounded-2xl bg-charcoal-light border border-gold/20 flex items-center justify-center text-gold">
-              <Package className="h-8 w-8" />
-            </div>
-            <div>
-              <h3 className="font-heading text-base font-bold text-cream">Outframed Keychain</h3>
-              <p className="text-xs text-cream-muted">Antique Gold Finish</p>
-            </div>
-          </div>
-        ) : (
-          items.map((item, idx) => (
-            <div
-              key={item.product_id || item.id || idx}
-              className="flex flex-col sm:flex-row sm:items-start gap-4 pb-4 last:pb-0 border-b last:border-b-0 border-charcoal-light/50"
-            >
-              {/* Main Product Image */}
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-gold/30 bg-obsidian shrink-0 shadow-md">
-                {item.image ? (
-                  <img
-                    src={item.image}
-                    alt={item.name || item.product_name}
-                    className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gold bg-charcoal">
-                    <Package className="h-8 w-8" />
-                  </div>
-                )}
+        {/* ── 2. Product Items (Main Image, Full Name on Side, Status Below) ── */}
+        <div className="space-y-4">
+          {items.length === 0 ? (
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-2xl bg-charcoal-light border border-gold/20 flex items-center justify-center text-gold">
+                <Package className="h-8 w-8" />
               </div>
-
-              {/* Side: Full Name of Product & Details */}
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-                  <h3 className="font-heading text-base sm:text-lg font-bold text-cream tracking-tight truncate">
-                    {item.name || item.product_name || 'Outframed Keychain'}
-                  </h3>
-                  <span className="font-heading text-sm font-bold text-gold shrink-0">
-                    ₹{item.price * (item.quantity || 1)}
-                  </span>
+              <div>
+                <h3 className="font-heading text-base font-bold text-cream">Outframed Keychain</h3>
+                <p className="text-xs text-cream-muted">Antique Gold Finish</p>
+              </div>
+            </div>
+          ) : (
+            items.map((item, idx) => (
+              <div
+                key={item.product_id || item.id || idx}
+                className="flex flex-col sm:flex-row sm:items-start gap-4 pb-4 last:pb-0 border-b last:border-b-0 border-charcoal-light/50"
+              >
+                {/* Main Product Image */}
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-gold/30 bg-obsidian shrink-0 shadow-md">
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.name || item.product_name}
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gold bg-charcoal">
+                      <Package className="h-8 w-8" />
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-1 flex items-center gap-2 text-xs text-cream-muted/70">
-                  <span>Qty: <strong className="text-cream">{item.quantity || 1}</strong></span>
-                  <span>·</span>
-                  <span>₹{item.price} each</span>
-                  <span>·</span>
-                  <span className="text-gold font-medium">Antique Gold Finish</span>
-                </div>
-
-                {/* Below that: Status of the product */}
-                <div className="mt-3 pt-3 border-t border-charcoal-light/60 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${badge.bg}`}>
-                      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-                      {badge.label}
-                    </span>
-                    <span className="text-xs text-cream-muted/70">
-                      {order.shipment?.estimated_delivery
-                        ? `Est. Delivery: ${new Date(order.shipment.estimated_delivery).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`
-                        : 'Estimated Delivery: 3-4 Days'}
+                {/* Side: Full Name of Product & Details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+                    <h3 className="font-heading text-base sm:text-lg font-bold text-cream tracking-tight truncate">
+                      {item.name || item.product_name || 'Outframed Keychain'}
+                    </h3>
+                    <span className="font-heading text-sm font-bold text-gold shrink-0">
+                      ₹{item.price * (item.quantity || 1)}
                     </span>
                   </div>
 
-                  <span className="text-[11px] text-cream-muted/50 font-mono">
-                    Courier: {order.shipment?.courier_partner || 'Delhivery Air'}
-                  </span>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-cream-muted/70">
+                    <span>Qty: <strong className="text-cream">{item.quantity || 1}</strong></span>
+                    <span>·</span>
+                    <span>₹{item.price} each</span>
+                    <span>·</span>
+                    <span className="text-gold font-medium">Antique Gold Finish</span>
+                  </div>
+
+                  {/* Below that: Status of the product */}
+                  <div className="mt-3 pt-3 border-t border-charcoal-light/60 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${badge.bg}`}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
+                        {badge.label}
+                      </span>
+                      <span className="text-xs text-cream-muted/70">
+                        {order.shipment?.estimated_delivery
+                          ? `Est. Delivery: ${new Date(order.shipment.estimated_delivery).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`
+                          : 'Estimated Delivery: 3-4 Days'}
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] text-cream-muted/50 font-mono">
+                      Carrier: {order.shipment?.courier_partner || 'Delhivery Air'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
 
-        {/* ── 3. Visual Progress Stepper ── */}
-        <div className="pt-2">
-          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-            {STAGES.map((stg, i) => {
-              const isDone = i <= currentStageIndex
-              const isCurrent = i === currentStageIndex
+        {/* ── 3. Vertical Checkpoints (Each Down of Each Other — Matched to Image 2) ── */}
+        <div className="pt-4 border-t border-charcoal-light/70">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-cream-muted/70 mb-5 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-gold" />
+            <span>Fulfillment Pipeline</span>
+          </h4>
+
+          <div className="relative pl-3 sm:pl-4 space-y-6 sm:space-y-7">
+            {/* Connected Vertical Progress Line */}
+            <div className="absolute left-[23px] sm:left-[27px] top-4 bottom-4 w-0.5 bg-charcoal-light">
+              <div
+                className="w-full bg-gradient-to-b from-gold via-yellow-300 to-gold transition-all duration-700"
+                style={{
+                  height: `${Math.min(100, (currentStageIndex / (STAGES.length - 1)) * 100)}%`,
+                }}
+              />
+            </div>
+
+            {STAGES.map((stage, idx) => {
+              const isDone = idx <= currentStageIndex
+              const isCurrent = idx === currentStageIndex
+              const StageIcon = stage.icon || Check
 
               return (
-                <div key={stg.key} className="flex flex-col items-center text-center">
-                  <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center transition-all ${
-                      isDone
-                        ? 'bg-gold text-obsidian font-bold shadow-md shadow-gold/25'
-                        : 'bg-charcoal border border-charcoal-light text-cream-muted/40'
-                    }`}
-                  >
-                    {isDone ? (
-                      <Check className="h-4 w-4 stroke-[3]" />
-                    ) : (
-                      <span className="text-[11px] font-bold">{i + 1}</span>
-                    )}
+                <div key={stage.key} className="relative flex items-start gap-4 sm:gap-5 group">
+                  {/* Glowing Node on Vertical Line */}
+                  <div className="relative z-10 shrink-0">
+                    <div
+                      className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center transition-all duration-500 ${
+                        isCurrent
+                          ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/35 shadow-xl shadow-gold/50 scale-105'
+                          : isDone
+                          ? 'bg-gold text-obsidian font-bold shadow-md shadow-gold/25'
+                          : 'bg-charcoal border border-charcoal-light text-cream-muted/30'
+                      }`}
+                    >
+                      {isDone && !isCurrent ? (
+                        <Check className="h-5 w-5 stroke-[2.5]" />
+                      ) : (
+                        <StageIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${isCurrent ? 'animate-pulse' : ''}`} />
+                      )}
+                    </div>
                   </div>
-                  <span
-                    className={`mt-1.5 text-[11px] font-bold leading-tight ${
-                      isCurrent ? 'text-gold' : isDone ? 'text-cream' : 'text-cream-muted/40'
-                    }`}
-                  >
-                    {stg.label}
-                  </span>
+
+                  {/* Side Checkpoint Details: Step Number, Title, and Description */}
+                  <div className="flex-1 min-w-0 pt-0.5 sm:pt-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`font-mono text-xs sm:text-sm font-extrabold italic tracking-wider ${
+                          isCurrent ? 'text-gold' : isDone ? 'text-gold/80' : 'text-cream-muted/30'
+                        }`}
+                      >
+                        {stage.step}
+                      </span>
+                      <h5
+                        className={`font-heading text-sm sm:text-base font-bold tracking-tight ${
+                          isCurrent ? 'text-gold' : isDone ? 'text-cream' : 'text-cream-muted/50'
+                        }`}
+                      >
+                        {stage.label}
+                      </h5>
+                      {isCurrent && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gold/15 text-gold border border-gold/30 shrink-0">
+                          Active Stage
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-cream-muted/70 mt-1 leading-relaxed">
+                      {stage.desc}
+                    </p>
+                  </div>
                 </div>
               )
             })}
@@ -575,19 +627,8 @@ function OrderCard({
             onClick={onToggleExpand}
             className="flex items-center gap-2 text-xs font-bold text-gold hover:text-yellow-200 transition-colors cursor-pointer"
           >
-            <span>{isExpanded ? 'Hide Courier Details' : 'View Full Tracking Details'}</span>
+            <span>{isExpanded ? 'Hide Courier Details' : 'View Full Courier Details'}</span>
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-
-          {/* Advance status for live demo */}
-          <button
-            type="button"
-            onClick={onAdvanceStatus}
-            className="inline-flex items-center gap-1.5 text-[11px] text-cream-muted/60 hover:text-gold transition-colors cursor-pointer"
-            title="Simulate next tracking stage"
-          >
-            <RefreshCw className="h-3 w-3" />
-            <span>Simulate Step</span>
           </button>
         </div>
 
