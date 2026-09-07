@@ -203,8 +203,8 @@ export default function CheckoutPage() {
   const handleResetForm = () => {
     setIsAddingNewAddress(false)
     setEditingAddressId(null)
-    setFormFullName(currentUser?.name || '')
-    setFormPhone(currentUser?.phone || '')
+    setFormFullName('')
+    setFormPhone('')
     setFormStreet('')
     setFormLandmark('')
     setFormCity('')
@@ -983,9 +983,10 @@ export default function CheckoutPage() {
                       <input
                         type="text"
                         required
+                        autoComplete="off"
                         value={formFullName}
                         onChange={(e) => setFormFullName(e.target.value)}
-                        placeholder="e.g. Pruthvi Patil"
+                        placeholder="e.g. Aryan Sharma"
                         className="w-full rounded-xl border border-charcoal-light bg-obsidian/80 px-3.5 py-2.5 text-xs text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none"
                       />
                     </div>
