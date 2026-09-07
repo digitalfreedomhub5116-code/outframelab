@@ -431,9 +431,40 @@ export async function logoutCustomer() {
   }
 }
 
+// Helper to guarantee a valid RFC4122 v4 UUID
+function getValidUUID(id) {
+  if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return id
+  }
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID()
+    } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 // ── 5. CUSTOMER SAVED ADDRESSES ──
 export async function getUserAddresses(userId = null) {
-  const effectiveUserId = userId || getCurrentCustomer()?.id || 'guest'
+  let effectiveUserId = userId
+  if (!effectiveUserId) {
+    const cust = getCurrentCustomer()
+    effectiveUserId = cust?.id
+  }
+  if (!effectiveUserId && isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      effectiveUserId = session?.user?.id
+    } catch (e) {}
+  }
+  if (!effectiveUserId) {
+    effectiveUserId = 'guest'
+  }
+
   const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
   const localAddrs = getLocalData(storageKey, [])
 
@@ -452,8 +483,23 @@ export async function getUserAddresses(userId = null) {
         .order('created_at', { ascending: false })
 
       if (!error && data) {
-        setLocalData(storageKey, data)
-        return data
+        if (data.length > 0) {
+          setLocalData(storageKey, data)
+          return data
+        } else if (localAddrs.length > 0) {
+          // Sync any unsynced local addresses up to Supabase
+          for (const addr of localAddrs) {
+            try {
+              await supabase.from('addresses').upsert({
+                ...addr,
+                id: getValidUUID(addr.id),
+                user_id: effectiveUserId,
+              })
+            } catch (syncErr) {}
+          }
+          return localAddrs
+        }
+        return []
       }
       if (error) {
         console.warn('Supabase addresses query error:', error.message)
@@ -468,15 +514,24 @@ export async function getUserAddresses(userId = null) {
 
 export async function saveUserAddress(addressData, userId = null) {
   const currentUser = getCurrentCustomer()
-  const effectiveUserId = userId || currentUser?.id || 'guest'
+  let effectiveUserId = userId
+  if (!effectiveUserId) {
+    effectiveUserId = currentUser?.id
+  }
+  if (!effectiveUserId && isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      effectiveUserId = session?.user?.id
+    } catch (e) {}
+  }
+  if (!effectiveUserId) {
+    effectiveUserId = 'guest'
+  }
+
   const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
   const localAddrs = getLocalData(storageKey, [])
 
-  const addressId =
-    addressData.id ||
-    (typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : 'addr-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7))
+  const addressId = getValidUUID(addressData.id)
 
   const newAddress = {
     id: addressId,
@@ -521,6 +576,17 @@ export async function saveUserAddress(addressData, userId = null) {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newAddress.user_id)
   ) {
     try {
+      // Ensure user profile exists in public.profiles table to prevent foreign key issues
+      await supabase.from('profiles').upsert(
+        {
+          id: newAddress.user_id,
+          full_name: currentUser?.name || newAddress.full_name || undefined,
+          email: currentUser?.email || undefined,
+          phone: currentUser?.phone || newAddress.phone || undefined,
+        },
+        { onConflict: 'id', ignoreDuplicates: true }
+      )
+
       if (newAddress.is_default) {
         await supabase
           .from('addresses')
@@ -535,6 +601,10 @@ export async function saveUserAddress(addressData, userId = null) {
         .single()
 
       if (!error && data) {
+        const serverIdx = updatedList.findIndex((a) => a.id === data.id || a.id === addressId)
+        if (serverIdx >= 0) updatedList[serverIdx] = data
+        else updatedList = [data, ...updatedList]
+        setLocalData(storageKey, updatedList)
         return data
       }
       if (error) {

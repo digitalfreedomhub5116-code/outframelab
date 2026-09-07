@@ -260,9 +260,14 @@ export default function CheckoutPage() {
 
       const saved = await saveUserAddress(payload, currentUser?.id)
       await loadAddresses(currentUser)
-      setSelectedAddressId(saved.id)
+      if (saved?.id) {
+        setSelectedAddressId(saved.id)
+      }
       handleResetForm()
+      // Advance to payment step immediately
+      setCurrentStep(2)
     } catch (err) {
+      console.error('Save address error:', err)
       setFormError('Could not save address. Please try again.')
     } finally {
       setFormSaving(false)
@@ -1100,14 +1105,26 @@ export default function CheckoutPage() {
                     <button
                       type="submit"
                       disabled={formSaving}
-                      className="btn-gold flex-1 rounded-xl py-3 text-xs font-bold uppercase tracking-wider shadow-md active:scale-98 cursor-pointer disabled:opacity-50"
+                      className="btn-gold flex-1 rounded-xl py-3.5 text-xs font-bold uppercase tracking-wider shadow-lg shadow-gold/25 active:scale-98 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {formSaving ? 'Saving Address...' : editingAddressId ? 'Update Address' : 'Use this address'}
+                      {formSaving ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin text-obsidian" />
+                          <span>Saving Address...</span>
+                        </>
+                      ) : editingAddressId ? (
+                        <span>Update & Deliver to this address</span>
+                      ) : (
+                        <>
+                          <span>Use this address & Proceed</span>
+                          <ChevronRight className="h-4 w-4 stroke-[3]" />
+                        </>
+                      )}
                     </button>
                     <button
                       type="button"
                       onClick={handleResetForm}
-                      className="rounded-xl border border-charcoal-light px-5 py-3 text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-cream"
+                      className="rounded-xl border border-charcoal-light px-5 py-3 text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-cream cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -1115,6 +1132,32 @@ export default function CheckoutPage() {
                 </form>
               )}
             </div>
+
+            {/* ═════════════════════════════════════════════════════════════
+                BOTTOM PROCEED TO PAYMENT BUTTON (Step 1)
+            ═════════════════════════════════════════════════════════════ */}
+            {addresses.length > 0 && !isAddingNewAddress && (
+              <div className="pt-6 border-t border-gold/20">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedAddressId) {
+                      setCurrentStep(2)
+                    } else if (addresses.length > 0) {
+                      setSelectedAddressId(addresses[0].id)
+                      setCurrentStep(2)
+                    }
+                  }}
+                  className="btn-gold w-full flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-extrabold uppercase tracking-widest shadow-2xl shadow-gold/30 cursor-pointer active:scale-98"
+                >
+                  <span>Proceed to Payment</span>
+                  <ChevronRight className="h-4 w-4 stroke-[3]" />
+                </button>
+                <p className="text-center text-[11px] text-cream-muted/60 mt-2">
+                  Next: Choose COD or Prepaid UPI on the next screen
+                </p>
+              </div>
+            )}
           </div>
         )}
 
