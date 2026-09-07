@@ -26,15 +26,16 @@ export default function Navbar({ visible = true }) {
   }
 
   return (
-    <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out ${
-        visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
-      } ${
-        scrolled
-          ? 'navbar-glass shadow-lg shadow-black/20'
-          : 'bg-transparent'
-      }`}
-    >
+    <>
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out ${
+          visible ? 'translate-y-0' : '-translate-y-full pointer-events-none'
+        } ${
+          scrolled
+            ? 'navbar-glass shadow-lg shadow-black/20'
+            : 'bg-transparent'
+        }`}
+      >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between sm:h-18">
           {/* Logo */}
@@ -191,9 +192,10 @@ export default function Navbar({ visible = true }) {
           </div>
         </div>
       </div>
-
-      {/* Customer Auth & Orders Modal */}
-      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
     </nav>
+
+    {/* Customer Auth & Orders Modal - Rendered outside of nav to avoid CSS transform stacking context */}
+    <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
+    </>
   )
 }
