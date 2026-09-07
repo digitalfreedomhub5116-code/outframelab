@@ -10,7 +10,9 @@ import {
   ShoppingBag,
   RefreshCw,
   User,
-  Sparkles
+  Sparkles,
+  Truck,
+  MapPin
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
