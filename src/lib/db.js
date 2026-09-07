@@ -1,0 +1,943 @@
+import { supabase, isSupabaseConfigured } from './supabase'
+import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
+
+const LOCAL_STORAGE_ORDERS_KEY = 'outframe_labs_orders'
+const LOCAL_STORAGE_USER_KEY = 'outframe_labs_user'
+const LOCAL_STORAGE_ADDRESSES_KEY = 'outframe_labs_addresses'
+
+// Helper for local storage
+const getLocalData = (key, fallback = []) => {
+  try {
+    const data = localStorage.getItem(key)
+    return data ? JSON.parse(data) : fallback
+  } catch (e) {
+    return fallback
+  }
+}
+
+const setLocalData = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (e) {
+    console.error('Storage error', e)
+  }
+}
+
+const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
+
+// ── 1. PRODUCTS & CATEGORIES ──
+export async function getProducts(options = {}) {
+  const { genre } = options
+
+  // 1. Check persistent local storage catalog
+  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, null)
+  let catalog = stored && Array.isArray(stored) && stored.length > 0 ? stored : MOCK_PRODUCTS
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let query = supabase.from('products').select('*').eq('is_active', true)
+      if (genre) {
+        query = query.eq('genre', genre)
+      }
+      const { data, error } = await query
+      if (!error && data && data.length > 0) {
+        return data
+      }
+    } catch (err) {
+      console.warn('Supabase products fetch failed, using cached catalog', err)
+    }
+  }
+
+  // Fallback to active catalog
+  if (genre) {
+    return catalog.filter((p) => p.genre === genre)
+  }
+  return catalog
+}
+
+export async function getProductBySlugOrId(identifier) {
+  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, null)
+  const catalog = stored && Array.isArray(stored) && stored.length > 0 ? stored : MOCK_PRODUCTS
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const isNum = !isNaN(Number(identifier))
+      const query = isNum
+        ? supabase.from('products').select('*, product_reviews(*)').eq('id', Number(identifier)).single()
+        : supabase.from('products').select('*, product_reviews(*)').eq('slug', identifier).single()
+      const { data, error } = await query
+      if (!error && data) return data
+    } catch (err) {
+      console.warn('Supabase product query error', err)
+    }
+  }
+
+  return (
+    catalog.find(
+      (p) => String(p.id) === String(identifier) || p.slug === identifier
+    ) || null
+  )
+}
+
+export async function saveProduct(product) {
+  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, MOCK_PRODUCTS)
+  const idx = stored.findIndex((p) => p.id === product.id)
+  let updated
+  if (idx >= 0) {
+    updated = [...stored]
+    updated[idx] = { ...updated[idx], ...product }
+  } else {
+    updated = [product, ...stored]
+  }
+  setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, updated)
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('products').upsert({
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        genre: product.genre,
+        price: product.price,
+        original_price: product.originalPrice,
+        description: product.description,
+        image: product.image,
+        gallery: product.gallery,
+        is_active: product.inStock !== false,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.warn('Supabase product upsert error', e)
+    }
+  }
+
+  return product
+}
+
+// ── 2. ORDERS & SHIPROCKET LIVE TRACKING ──
+export async function createOrder(orderPayload) {
+  const orderNumber = 'OFL-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000)
+  const awbCode = 'DL' + Math.floor(100000000 + Math.random() * 900000000)
+  const estimatedDelivery = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+
+  const initialTrackingEvents = [
+    {
+      id: 'evt-1',
+      status: 'PLACED',
+      activity: 'Order placed & payment verified',
+      location: 'Outframe Online Store',
+      event_time: new Date().toISOString(),
+    },
+    {
+      id: 'evt-2',
+      status: 'CONFIRMED',
+      activity: 'Order confirmed: Keychain queued for 3D printing & antique gold patina finishing',
+      location: 'Outframe Workshop, Bengaluru',
+      event_time: new Date(Date.now() + 1000 * 60 * 5).toISOString(),
+    },
+  ]
+
+  const shipmentData = {
+    courier_partner: 'Delhivery Air (Express)',
+    awb_code: awbCode,
+    tracking_url: `https://www.delhivery.com/track/package/${awbCode}`,
+    status: 'CONFIRMED',
+    estimated_delivery: estimatedDelivery,
+  }
+
+  const newOrder = {
+    id: 'ord-' + Math.random().toString(36).substring(2, 9),
+    order_number: orderNumber,
+    customer_name: orderPayload.customer_name,
+    customer_phone: orderPayload.customer_phone,
+    customer_email: orderPayload.customer_email || '',
+    shipping_address: orderPayload.shipping_address,
+    items: orderPayload.items || [],
+    subtotal: orderPayload.subtotal,
+    shipping_fee: orderPayload.shipping_fee || 60,
+    total_amount: orderPayload.total_amount,
+    payment_method: orderPayload.payment_method || 'COD',
+    payment_status: orderPayload.payment_method === 'COD' ? 'PENDING' : 'PAID',
+    status: 'CONFIRMED',
+    shipment: shipmentData,
+    tracking_events: initialTrackingEvents,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  // 1. Persist directly to Supabase if configured
+  if (isSupabaseConfigured && supabase) {
+    try {
+      // Validate user_id: Must be a valid UUID and present in public.profiles table
+      let validUserId = null
+      if (
+        orderPayload.user_id &&
+        typeof orderPayload.user_id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderPayload.user_id)
+      ) {
+        try {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', orderPayload.user_id)
+            .maybeSingle()
+          if (profileRow?.id) {
+            validUserId = orderPayload.user_id
+          }
+        } catch (pe) {
+          // If profile lookup fails, leave as null to avoid foreign key failure
+        }
+      }
+
+      const orderInsertData = {
+        order_number: orderNumber,
+        user_id: validUserId,
+        customer_name: newOrder.customer_name,
+        customer_phone: newOrder.customer_phone,
+        customer_email: newOrder.customer_email,
+        shipping_address: newOrder.shipping_address,
+        subtotal: newOrder.subtotal,
+        shipping_fee: newOrder.shipping_fee,
+        total_amount: newOrder.total_amount,
+        payment_method: newOrder.payment_method,
+        payment_status: newOrder.payment_status,
+        status: newOrder.status,
+      }
+
+      let { data: orderRecord, error: orderError } = await supabase
+        .from('orders')
+        .insert(orderInsertData)
+        .select()
+        .single()
+
+      // Resilient fallback: If user_id caused foreign key violation or syntax issue, retry with user_id: null
+      if (orderError && validUserId) {
+        console.warn('Order insertion with user_id failed, retrying with user_id = null:', orderError.message)
+        const retry = await supabase
+          .from('orders')
+          .insert({ ...orderInsertData, user_id: null })
+          .select()
+          .single()
+        orderRecord = retry.data
+        orderError = retry.error
+      }
+
+      if (orderError) {
+        console.error('Supabase order creation error:', orderError)
+      } else if (orderRecord) {
+        newOrder.id = orderRecord.id
+        console.log('[Supabase] Order inserted successfully:', orderRecord.order_number)
+
+        // 1. Insert order items
+        if (newOrder.items && newOrder.items.length > 0) {
+          const itemRows = newOrder.items.map((it) => {
+            const pid = Number(it.product_id || it.id)
+            return {
+              order_id: orderRecord.id,
+              product_id: !isNaN(pid) && pid >= 1 && pid <= 25 ? pid : null,
+              product_name: it.name || 'Keychain',
+              quantity: it.quantity || 1,
+              price: it.price || 0,
+              image: it.image || '',
+            }
+          })
+          const { error: itemsErr } = await supabase.from('order_items').insert(itemRows)
+          if (itemsErr) console.warn('Supabase order_items error:', itemsErr.message)
+        }
+
+        // 2. Insert shipment & live tracking events
+        if (newOrder.shipment) {
+          const { data: shipRecord, error: shipErr } = await supabase
+            .from('shipments')
+            .insert({
+              order_id: orderRecord.id,
+              courier_partner: newOrder.shipment.courier_partner,
+              awb_code: newOrder.shipment.awb_code,
+              tracking_url: newOrder.shipment.tracking_url,
+              status: newOrder.shipment.status,
+              estimated_delivery: newOrder.shipment.estimated_delivery,
+            })
+            .select()
+            .single()
+
+          if (shipErr) {
+            console.warn('Supabase shipments error:', shipErr.message)
+          } else if (shipRecord && newOrder.tracking_events && newOrder.tracking_events.length > 0) {
+            // 3. Insert tracking events
+            const trkRows = newOrder.tracking_events.map((evt) => ({
+              shipment_id: shipRecord.id,
+              order_id: orderRecord.id,
+              status: evt.status || 'PLACED',
+              activity: evt.activity || 'Order placed',
+              location: evt.location || 'Outframe Online Store',
+              event_time: evt.event_time || new Date().toISOString(),
+            }))
+            const { error: trkErr } = await supabase.from('tracking_events').insert(trkRows)
+            if (trkErr) console.warn('Supabase tracking_events error:', trkErr.message)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase order insert unexpected error, using local state', e)
+    }
+  }
+
+  // 2. Persist in local storage for instantaneous live lookup
+  const existingOrders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+  setLocalData(LOCAL_STORAGE_ORDERS_KEY, [newOrder, ...existingOrders])
+
+  return newOrder
+}
+
+export async function getOrder(orderNumberOrId) {
+  if (!orderNumberOrId) return null
+  const cleaned = orderNumberOrId.trim().toUpperCase()
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderNumberOrId.trim())
+
+  // Check Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let query = supabase
+        .from('orders')
+        .select('*, order_items(*), shipments(*, tracking_events(*))')
+
+      if (isUUID) {
+        query = query.or(`order_number.eq.${cleaned},id.eq.${orderNumberOrId.trim()}`)
+      } else {
+        query = query.eq('order_number', cleaned)
+      }
+
+      const { data, error } = await query.single()
+      if (!error && data) return data
+    } catch (e) {
+      console.warn('Supabase getOrder query error', e)
+    }
+  }
+
+  // Check local storage
+  const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+  return orders.find(
+    (o) => o.order_number?.toUpperCase() === cleaned || o.id === orderNumberOrId
+  ) || null
+}
+
+export async function getOrdersByPhone(phone) {
+  if (!phone) return []
+  const cleanedPhone = phone.replace(/[^0-9]/g, '')
+
+  // 1. Check Supabase
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*), shipments(*, tracking_events(*))')
+        .ilike('customer_phone', `%${cleanedPhone.slice(-10)}%`)
+        .order('created_at', { ascending: false })
+      if (!error && data && data.length > 0) {
+        return data
+      }
+    } catch (e) {
+      console.warn('Supabase getOrdersByPhone error', e)
+    }
+  }
+
+  // 2. Check local storage
+  const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+  return orders.filter((o) => {
+    const p = (o.customer_phone || '').replace(/[^0-9]/g, '')
+    return p.includes(cleanedPhone) || cleanedPhone.includes(p)
+  })
+}
+
+export async function getAllOrders() {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*), shipments(*, tracking_events(*))')
+        .order('created_at', { ascending: false })
+      if (!error && data && data.length > 0) {
+        return data
+      }
+    } catch (e) {
+      console.warn('Supabase getAllOrders error', e)
+    }
+  }
+
+  return getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+}
+
+// ── 3. SIMULATE / ADVANCE ORDER STATUS (For Live Testing & Demos) ──
+export function advanceOrderStatus(orderNumber) {
+  const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+  const index = orders.findIndex((o) => o.order_number === orderNumber)
+  if (index === -1) return null
+
+  const order = orders[index]
+  const stages = ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED']
+  const currentIndex = stages.indexOf(order.status)
+  
+  if (currentIndex < stages.length - 1) {
+    const nextStatus = stages[currentIndex + 1]
+    order.status = nextStatus
+    if (order.shipment) {
+      order.shipment.status = nextStatus
+    }
+
+    const activityMap = {
+      PACKED: { activity: 'Keychain carefully inspected and sealed in antique gold collectors tin box', location: 'Outframe Fulfillment Hub, Bengaluru' },
+      SHIPPED: { activity: 'Handed over to courier partner (Delhivery Air)', location: 'Bengaluru Sort Facility' },
+      IN_TRANSIT: { activity: 'Package in transit between distribution hubs', location: 'National Sorting Center' },
+      OUT_FOR_DELIVERY: { activity: 'Out for delivery with courier delivery executive', location: order.shipping_address?.city || 'Local Delivery Hub' },
+      DELIVERED: { activity: 'Delivered to customer. Signature verified', location: order.shipping_address?.city || 'Destination Address' },
+    }
+
+    const newEvt = {
+      id: 'evt-' + Date.now(),
+      status: nextStatus,
+      activity: activityMap[nextStatus]?.activity || 'Package status updated',
+      location: activityMap[nextStatus]?.location || 'Courier Network',
+      event_time: new Date().toISOString(),
+    }
+
+    order.tracking_events = [...(order.tracking_events || []), newEvt]
+    order.updated_at = new Date().toISOString()
+    orders[index] = order
+    setLocalData(LOCAL_STORAGE_ORDERS_KEY, orders)
+    return order
+  }
+
+  return order
+}
+
+// ── 4. CUSTOMER PROFILE & AUTH STATE ──
+export function getCurrentCustomer() {
+  return getLocalData(LOCAL_STORAGE_USER_KEY, null)
+}
+
+export function saveCustomerProfile(user) {
+  setLocalData(LOCAL_STORAGE_USER_KEY, user)
+  return user
+}
+
+export async function logoutCustomer() {
+  localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.auth.signOut()
+    } catch (e) {
+      console.warn('Supabase signout error', e)
+    }
+  }
+}
+
+// ── 5. CUSTOMER SAVED ADDRESSES ──
+export async function getUserAddresses(userId = null) {
+  const effectiveUserId = userId || getCurrentCustomer()?.id || 'guest'
+  const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
+  const localAddrs = getLocalData(storageKey, [])
+
+  // If Supabase is configured and we have a valid UUID user_id
+  if (
+    isSupabaseConfigured &&
+    supabase &&
+    effectiveUserId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId)
+  ) {
+    try {
+      const { data, error } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('user_id', effectiveUserId)
+        .order('created_at', { ascending: false })
+
+      if (!error && data) {
+        setLocalData(storageKey, data)
+        return data
+      }
+      if (error) {
+        console.warn('Supabase addresses query error:', error.message)
+      }
+    } catch (e) {
+      console.warn('Failed to fetch addresses from Supabase, fallback to local', e)
+    }
+  }
+
+  return localAddrs
+}
+
+export async function saveUserAddress(addressData, userId = null) {
+  const currentUser = getCurrentCustomer()
+  const effectiveUserId = userId || currentUser?.id || 'guest'
+  const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
+  const localAddrs = getLocalData(storageKey, [])
+
+  const addressId =
+    addressData.id ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : 'addr-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7))
+
+  const newAddress = {
+    id: addressId,
+    user_id:
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId)
+        ? effectiveUserId
+        : null,
+    full_name: addressData.full_name || addressData.fullName || '',
+    phone: addressData.phone || '',
+    street_address:
+      addressData.street_address || addressData.streetAddress || addressData.street || '',
+    landmark: addressData.landmark || '',
+    city: addressData.city || '',
+    state: addressData.state || 'Maharashtra',
+    pincode: addressData.pincode || '',
+    is_default: addressData.is_default ?? localAddrs.length === 0,
+    delivery_instructions:
+      addressData.delivery_instructions || addressData.deliveryInstructions || '',
+    created_at: addressData.created_at || new Date().toISOString(),
+  }
+
+  // If this address is set to default, set others to false
+  let updatedList = localAddrs
+  if (newAddress.is_default) {
+    updatedList = updatedList.map((a) => ({ ...a, is_default: false }))
+  }
+
+  const existingIndex = updatedList.findIndex((a) => a.id === addressId)
+  if (existingIndex >= 0) {
+    updatedList[existingIndex] = { ...updatedList[existingIndex], ...newAddress }
+  } else {
+    updatedList = [newAddress, ...updatedList]
+  }
+
+  setLocalData(storageKey, updatedList)
+
+  // Sync to Supabase if configured and valid UUID user
+  if (
+    isSupabaseConfigured &&
+    supabase &&
+    newAddress.user_id &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(newAddress.user_id)
+  ) {
+    try {
+      if (newAddress.is_default) {
+        await supabase
+          .from('addresses')
+          .update({ is_default: false })
+          .eq('user_id', newAddress.user_id)
+      }
+
+      const { data, error } = await supabase
+        .from('addresses')
+        .upsert(newAddress)
+        .select()
+        .single()
+
+      if (!error && data) {
+        return data
+      }
+      if (error) {
+        console.warn('Supabase address upsert warning:', error.message)
+      }
+    } catch (e) {
+      console.warn('Supabase address upsert exception:', e)
+    }
+  }
+
+  return newAddress
+}
+
+export async function deleteUserAddress(addressId, userId = null) {
+  const effectiveUserId = userId || getCurrentCustomer()?.id || 'guest'
+  const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
+  const localAddrs = getLocalData(storageKey, [])
+
+  const nextList = localAddrs.filter((a) => a.id !== addressId)
+  if (nextList.length > 0 && !nextList.some((a) => a.is_default)) {
+    nextList[0].is_default = true
+  }
+  setLocalData(storageKey, nextList)
+
+  if (
+    isSupabaseConfigured &&
+    supabase &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(addressId)
+  ) {
+    try {
+      await supabase.from('addresses').delete().eq('id', addressId)
+    } catch (e) {
+      console.warn('Supabase delete address error:', e)
+    }
+  }
+
+  return nextList
+}
+
+export async function setDefaultUserAddress(addressId, userId = null) {
+  const effectiveUserId = userId || getCurrentCustomer()?.id || 'guest'
+  const storageKey = `${LOCAL_STORAGE_ADDRESSES_KEY}_${effectiveUserId}`
+  const localAddrs = getLocalData(storageKey, [])
+
+  const nextList = localAddrs.map((a) => ({
+    ...a,
+    is_default: a.id === addressId,
+  }))
+  setLocalData(storageKey, nextList)
+
+  if (
+    isSupabaseConfigured &&
+    supabase &&
+    effectiveUserId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId)
+  ) {
+    try {
+      await supabase
+        .from('addresses')
+        .update({ is_default: false })
+        .eq('user_id', effectiveUserId)
+
+      await supabase
+        .from('addresses')
+        .update({ is_default: true })
+        .eq('id', addressId)
+    } catch (e) {
+      console.warn('Supabase setDefaultUserAddress error:', e)
+    }
+  }
+
+  return nextList
+}
+
+// ── Google OAuth Sign-in (Native Centered Popup Flow) ──
+export async function signInWithGoogle() {
+  if (isSupabaseConfigured && supabase) {
+    const redirectUrl = `${window.location.origin}/auth/callback`
+
+    // Pre-calculate centered popup coordinates
+    const width = 500
+    const height = 650
+    const left = window.screenX + (window.outerWidth - width) / 2
+    const top = window.screenY + (window.outerHeight - height) / 2
+
+    // 1. Open native browser popup window immediately on user click
+    const popup = window.open(
+      'about:blank',
+      'GoogleSignInPopup',
+      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,toolbar=no,menubar=no`
+    )
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      })
+
+      if (error) {
+        if (popup && !popup.closed) popup.close()
+        throw error
+      }
+
+      if (data?.url) {
+        if (popup && !popup.closed) {
+          popup.location.href = data.url
+          popup.focus()
+        } else {
+          // Fallback if popup was blocked
+          window.location.href = data.url
+        }
+      }
+
+      // Wait for auth completion via postMessage or popup closing
+      return new Promise((resolve) => {
+        let resolved = false
+
+        const handleMessage = (event) => {
+          if (event.origin !== window.location.origin) return
+          if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+            resolved = true
+            window.removeEventListener('message', handleMessage)
+            clearInterval(pollTimer)
+            resolve(event.data.profile)
+          }
+        }
+        window.addEventListener('message', handleMessage)
+
+        const pollTimer = setInterval(async () => {
+          if (!popup || popup.closed) {
+            clearInterval(pollTimer)
+            window.removeEventListener('message', handleMessage)
+            if (!resolved) {
+              // Check session in case popup closed right after redirect
+              try {
+                const { data: { session } } = await supabase.auth.getSession()
+                if (session?.user) {
+                  const u = session.user
+                  const profile = {
+                    id: u.id,
+                    name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Google User',
+                    email: u.email,
+                    avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || '',
+                    provider: 'google',
+                    created_at: new Date().toISOString(),
+                  }
+                  saveCustomerProfile(profile)
+                  resolve(profile)
+                  return
+                }
+              } catch (e) {}
+              resolve(null)
+            }
+          }
+        }, 500)
+      })
+    } catch (err) {
+      if (popup && !popup.closed) popup.close()
+      throw err
+    }
+  }
+
+  // Fallback demo simulation if Supabase is offline
+  const mockGoogleUser = {
+    id: 'google-cust-' + Date.now(),
+    name: 'Google Collector',
+    email: 'collector@gmail.com',
+    phone: '',
+    avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80',
+    provider: 'google',
+    created_at: new Date().toISOString(),
+  }
+  saveCustomerProfile(mockGoogleUser)
+  return mockGoogleUser
+}
+
+// ── Email & Password Sign-in (With Seamless Auto-Signup for New Users) ──
+export async function signInWithEmail(email, password) {
+  const cleanEmail = email.trim().toLowerCase()
+
+  if (isSupabaseConfigured && supabase) {
+    // 1. Try regular password sign-in
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: password,
+    })
+
+    if (!signInError && signInData?.user) {
+      const u = signInData.user
+      const profile = {
+        id: u.id,
+        name: u.user_metadata?.full_name || cleanEmail.split('@')[0],
+        email: u.email,
+        phone: u.user_metadata?.phone || '',
+        provider: 'email',
+        created_at: u.created_at || new Date().toISOString(),
+      }
+      saveCustomerProfile(profile)
+
+      // Ensure record exists in public.profiles table
+      try {
+        await supabase.from('profiles').upsert({
+          id: u.id,
+          full_name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          updated_at: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.warn('Profiles table sync warning:', err)
+      }
+
+      return profile
+    }
+
+    // 2. If sign-in failed: user might not be registered yet -> auto sign-up
+    if (signInError) {
+      console.log('Sign in attempt failed, checking if user is new for auto sign-up:', signInError.message)
+      const defaultName = cleanEmail.split('@')[0]
+
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            full_name: defaultName,
+            phone: '',
+          },
+        },
+      })
+
+      // Check if user was ALREADY registered (meaning password was incorrect)
+      const isAlreadyRegistered =
+        signUpError?.message?.toLowerCase().includes('already registered') ||
+        signUpError?.message?.toLowerCase().includes('already exists') ||
+        signUpError?.status === 422 ||
+        (signUpData?.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0)
+
+      if (isAlreadyRegistered) {
+        // User exists, so the original invalid credentials error is appropriate
+        throw new Error(signInError.message || 'Invalid login credentials. Please check your password.')
+      }
+
+      // If sign-up returned another error (e.g. password too short)
+      if (signUpError) {
+        throw signUpError
+      }
+
+      // Auto sign-up succeeded! New user registered and added to database
+      if (signUpData?.user) {
+        const newUser = signUpData.user
+        const newProfile = {
+          id: newUser.id,
+          name: defaultName,
+          email: newUser.email,
+          phone: '',
+          provider: 'email',
+          created_at: new Date().toISOString(),
+        }
+        saveCustomerProfile(newProfile)
+
+        // Add user record into Supabase public.profiles table
+        try {
+          await supabase.from('profiles').upsert({
+            id: newUser.id,
+            full_name: newProfile.name,
+            email: newProfile.email,
+            phone: newProfile.phone,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+        } catch (err) {
+          console.warn('Profiles table auto sign-up upsert warning:', err)
+        }
+
+        return newProfile
+      }
+    }
+  }
+
+  // Fallback local signin
+  const fallback = {
+    id: 'cust-' + Math.random().toString(36).substring(2, 9),
+    name: cleanEmail.split('@')[0],
+    email: cleanEmail,
+    phone: '',
+    provider: 'email',
+    created_at: new Date().toISOString(),
+  }
+  saveCustomerProfile(fallback)
+  return fallback
+}
+
+// ── Email & Password Sign-up ──
+export async function signUpWithEmail(email, password, fullName, phone) {
+  const cleanEmail = email.trim().toLowerCase()
+  const cleanName = fullName?.trim() || cleanEmail.split('@')[0]
+  const cleanPhone = phone?.trim() || ''
+
+  if (isSupabaseConfigured && supabase) {
+    const { data, error } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: password,
+      options: {
+        data: {
+          full_name: cleanName,
+          phone: cleanPhone,
+        },
+      },
+    })
+    if (error) throw error
+    if (data?.user) {
+      if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        throw new Error('An account with this email already exists. Please sign in instead.')
+      }
+
+      const profile = {
+        id: data.user.id,
+        name: cleanName,
+        email: data.user.email,
+        phone: cleanPhone || data.user.user_metadata?.phone || '',
+        provider: 'email',
+        created_at: new Date().toISOString(),
+      }
+      saveCustomerProfile(profile)
+
+      // Sync into public.profiles table
+      try {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          full_name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.warn('Profiles table upsert error', err)
+      }
+
+      return profile
+    }
+  }
+
+  // Fallback local registration
+  const fallback = {
+    id: 'cust-' + Math.random().toString(36).substring(2, 9),
+    name: cleanName || 'Collector',
+    email: cleanEmail,
+    phone: cleanPhone,
+    provider: 'email',
+    created_at: new Date().toISOString(),
+  }
+  saveCustomerProfile(fallback)
+  return fallback
+}
+
+// ── Realtime Auth Listener ──
+export function initAuthListener(onUserChange) {
+  if (isSupabaseConfigured && supabase) {
+    // Initial check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const u = session.user
+        const profile = {
+          id: u.id,
+          name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Collector',
+          email: u.email,
+          phone: u.user_metadata?.phone || '',
+          avatar_url: u.user_metadata?.avatar_url || '',
+          provider: u.app_metadata?.provider || 'email',
+        }
+        saveCustomerProfile(profile)
+        if (onUserChange) onUserChange(profile)
+      }
+    }).catch(() => {})
+
+    // Subscription
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const u = session.user
+        const profile = {
+          id: u.id,
+          name: u.user_metadata?.full_name || u.email?.split('@')[0] || 'Collector',
+          email: u.email,
+          phone: u.user_metadata?.phone || '',
+          avatar_url: u.user_metadata?.avatar_url || '',
+          provider: u.app_metadata?.provider || 'email',
+        }
+        saveCustomerProfile(profile)
+        if (onUserChange) onUserChange(profile)
+      } else {
+        if (onUserChange) onUserChange(null)
+      }
+    })
+
+    return () => subscription?.unsubscribe?.()
+  }
+}
