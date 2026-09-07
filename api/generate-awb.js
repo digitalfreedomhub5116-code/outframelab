@@ -390,12 +390,13 @@ export default async function handler(req, res) {
         courierName = assignAwbResult.courier_name || courierName
       } else {
         const awbError =
+          assignAwbResult.response?.data?.awb_assign_error ||
           assignAwbResult.message ||
           assignAwbResult.response?.data?.error ||
           'Failed to assign courier partner'
         return sendJson(res, 422, {
           success: false,
-          error: `Order created (Shipment ID: ${shipmentId}), but AWB generation failed: ${awbError}`,
+          error: `Shiprocket: ${awbError}`,
           shipment_id: shipmentId,
         })
       }
