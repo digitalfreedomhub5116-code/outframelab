@@ -23,7 +23,7 @@ export default function FeatureBanner() {
 
               <div className="relative overflow-hidden rounded-2xl border border-gold/30 bg-charcoal shadow-2xl shadow-black">
                 <img
-                  src="/images/why-inside-poster.png"
+                  src="/images/why-inside-poster.jpg"
                   alt="Why Inside? Beyond the Frame artwork"
                   className="w-full h-auto object-cover rounded-xl transition-transform duration-700 ease-out group-hover:scale-102"
                   loading="lazy"
