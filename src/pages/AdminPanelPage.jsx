@@ -511,7 +511,8 @@ export default function AdminPanelPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [copiedAwb, setCopiedAwb] = useState(null)
-  const [toastMessage, setToastMessage] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [generatingAwb, setGeneratingAwb] = useState({})
 
   // Products Tab Local Filters
   const [productSearch, setProductSearch] = useState('')
@@ -601,11 +602,11 @@ export default function AdminPanelPage() {
     }
   }, [])
 
-  const showToast = (msg) => {
-    setToastMessage(msg)
+  const showToast = (msg, type = 'success') => {
+    setToast({ message: msg, type })
     setTimeout(() => {
-      setToastMessage(null)
-    }, 4000)
+      setToast(null)
+    }, 5000)
   }
 
   // Update order status
@@ -618,25 +619,64 @@ export default function AdminPanelPage() {
         return o
       })
     )
-    showToast(`Order #${orderId} status set to "${newStatus}"`)
+    showToast(`Order #${orderId} status set to "${newStatus}"`, 'success')
   }
 
-  // Generate AWB for Maharashtra dispatch via Shiprocket / Delhivery
-  const handleGenerateAwb = (orderId) => {
-    const randomAwb = 'DL-MH-' + Math.floor(100000000 + Math.random() * 900000000)
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            awb_code: randomAwb,
-            status: 'Shipped',
-          }
-        }
-        return o
+  // Generate AWB for dispatch via Shiprocket API
+  const handleGenerateAwb = async (orderId) => {
+    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!targetOrder) {
+      showToast('Order not found in database records.', 'error')
+      return
+    }
+
+    setGeneratingAwb((prev) => ({ ...prev, [orderId]: true }))
+
+    try {
+      const res = await fetch('/api/generate-awb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: targetOrder.id || orderId,
+          orderData: targetOrder,
+        }),
       })
-    )
-    showToast(`AWB Generated: ${randomAwb} (Shiprocket Maharashtra Hub)`)
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        const errorMsg = data.error || 'Failed to generate AWB with Shiprocket'
+        showToast(errorMsg, 'error')
+        return
+      }
+
+      // Update local state with real AWB, courier partner, tracking URL, and label URL
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId || o.order_number === orderId) {
+            return {
+              ...o,
+              awb_code: data.awb_code,
+              status: 'Shipped',
+              courier_partner: data.courier_name || o.courier_partner || 'Delhivery Express',
+              tracking_url: data.tracking_url,
+              label_url: data.label_url,
+            }
+          }
+          return o
+        })
+      )
+
+      showToast(
+        `AWB Generated: ${data.awb_code} (${data.courier_name || 'Shiprocket'})`,
+        'success'
+      )
+    } catch (err) {
+      console.error('Error generating AWB:', err)
+      showToast(`Network error communicating with shipping service: ${err.message}`, 'error')
+    } finally {
+      setGeneratingAwb((prev) => ({ ...prev, [orderId]: false }))
+    }
   }
 
   // Copy AWB code
@@ -794,12 +834,22 @@ export default function AdminPanelPage() {
   return (
     <div className="min-h-screen bg-obsidian text-cream flex">
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-gold/40 bg-charcoal px-5 py-3.5 shadow-2xl text-sm text-cream transition-all animate-fade-in-up">
-          <Sparkles className="w-5 h-5 text-gold shrink-0" />
-          <span className="font-medium">{toastMessage}</span>
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border px-5 py-3.5 shadow-2xl text-sm transition-all animate-fade-in-up ${
+            toast.type === 'error'
+              ? 'border-red-500/60 bg-red-950/95 text-red-100 shadow-red-950/50'
+              : 'border-gold/40 bg-charcoal text-cream shadow-gold/10'
+          }`}
+        >
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+          ) : (
+            <Sparkles className="w-5 h-5 text-gold shrink-0" />
+          )}
+          <span className="font-medium max-w-sm leading-snug">{toast.message}</span>
           <button
-            onClick={() => setToastMessage(null)}
+            onClick={() => setToast(null)}
             className="ml-2 text-cream-muted hover:text-cream cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -1451,9 +1501,14 @@ export default function AdminPanelPage() {
 
                             {/* Actions / Generate AWB */}
                             <td className="px-5 py-4 align-top text-right whitespace-nowrap">
-                              {order.awb_code ? (
-                                <div className="inline-flex flex-col items-end gap-1">
-                                  <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded text-xs font-mono text-emerald-300">
+                              {generatingAwb[order.id] ? (
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gold/10 border border-gold/30 text-xs font-bold text-gold cursor-wait">
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Generating AWB...</span>
+                                </div>
+                              ) : order.awb_code ? (
+                                <div className="inline-flex flex-col items-end gap-1.5">
+                                  <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded text-xs font-mono text-emerald-300 shadow-sm">
                                     <Truck className="w-3 h-3" />
                                     <span>{order.awb_code}</span>
                                     <button
@@ -1468,8 +1523,36 @@ export default function AdminPanelPage() {
                                       )}
                                     </button>
                                   </div>
+
+                                  {/* Fast Shipping Actions: Track & Print Label */}
+                                  <div className="flex items-center gap-2 text-[11px]">
+                                    <a
+                                      href={order.tracking_url || `https://shiprocket.co/tracking/${order.awb_code}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-gold hover:underline font-semibold"
+                                      title="Live Carrier Tracking Portal"
+                                    >
+                                      <span>Track</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+
+                                    <span className="text-cream-muted/30">·</span>
+
+                                    <a
+                                      href={order.label_url || `https://shiprocket.co/tracking/${order.awb_code}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-emerald-400 hover:underline font-semibold"
+                                      title="Print Official Shipping Label PDF"
+                                    >
+                                      <Printer className="w-3 h-3" />
+                                      <span>Label</span>
+                                    </a>
+                                  </div>
+
                                   <span className="text-[10px] text-cream-muted/50">
-                                    Delhivery via Shiprocket MH
+                                    {order.courier_partner || 'Shiprocket Logistics'}
                                   </span>
                                 </div>
                               ) : (
