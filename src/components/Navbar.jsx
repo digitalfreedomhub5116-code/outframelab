@@ -63,7 +63,7 @@ export default function Navbar({ visible = true }) {
               className="text-sm font-medium text-cream-muted transition-colors hover:text-gold tracking-wide flex items-center gap-1.5"
             >
               <Truck className="h-4 w-4 text-gold/80" />
-              <span>TRACK ORDER</span>
+              <span>ORDERS & TRACK</span>
             </Link>
           </div>
 

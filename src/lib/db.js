@@ -411,17 +411,25 @@ export function advanceOrderStatus(orderNumber) {
 }
 
 // ── 4. CUSTOMER PROFILE & AUTH STATE ──
+const authListeners = new Set()
+
 export function getCurrentCustomer() {
   return getLocalData(LOCAL_STORAGE_USER_KEY, null)
 }
 
 export function saveCustomerProfile(user) {
   setLocalData(LOCAL_STORAGE_USER_KEY, user)
+  authListeners.forEach((fn) => {
+    try { fn(user) } catch (e) {}
+  })
   return user
 }
 
 export async function logoutCustomer() {
   localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
+  authListeners.forEach((fn) => {
+    try { fn(null) } catch (e) {}
+  })
   if (isSupabaseConfigured && supabase) {
     try {
       await supabase.auth.signOut()
@@ -971,8 +979,17 @@ export async function signUpWithEmail(email, password, fullName, phone) {
 
 // ── Realtime Auth Listener ──
 export function initAuthListener(onUserChange) {
+  if (!onUserChange) return () => {}
+  authListeners.add(onUserChange)
+
+  // 1. Immediately provide cached customer profile
+  const current = getCurrentCustomer()
+  if (current) {
+    onUserChange(current)
+  }
+
   if (isSupabaseConfigured && supabase) {
-    // Initial check
+    // 2. Validate/refresh Supabase session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const u = session.user
@@ -985,12 +1002,12 @@ export function initAuthListener(onUserChange) {
           provider: u.app_metadata?.provider || 'email',
         }
         saveCustomerProfile(profile)
-        if (onUserChange) onUserChange(profile)
+        onUserChange(profile)
       }
     }).catch(() => {})
 
-    // Subscription
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 3. Subscription for future auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         const u = session.user
         const profile = {
@@ -1002,12 +1019,197 @@ export function initAuthListener(onUserChange) {
           provider: u.app_metadata?.provider || 'email',
         }
         saveCustomerProfile(profile)
-        if (onUserChange) onUserChange(profile)
-      } else {
-        if (onUserChange) onUserChange(null)
+        onUserChange(profile)
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
+        onUserChange(null)
       }
     })
 
-    return () => subscription?.unsubscribe?.()
+    return () => {
+      authListeners.delete(onUserChange)
+      subscription?.unsubscribe?.()
+    }
   }
+
+  return () => {
+    authListeners.delete(onUserChange)
+  }
+}
+
+// ── 6. PERSISTENT ACCOUNT CART ──
+const LOCAL_STORAGE_CART_KEY = 'outframe_labs_cart'
+
+export function getLocalCart() {
+  const current = getCurrentCustomer()
+  if (current?.id) {
+    const userCart = getLocalData(`${LOCAL_STORAGE_CART_KEY}_${current.id}`, null)
+    if (userCart && Array.isArray(userCart) && userCart.length > 0) {
+      return userCart
+    }
+  }
+  return getLocalData(LOCAL_STORAGE_CART_KEY, [])
+}
+
+export function saveLocalCart(items) {
+  setLocalData(LOCAL_STORAGE_CART_KEY, items)
+  const current = getCurrentCustomer()
+  if (current?.id) {
+    setLocalData(`${LOCAL_STORAGE_CART_KEY}_${current.id}`, items)
+  }
+}
+
+export async function saveCartToAccount(items, userId = null) {
+  saveLocalCart(items)
+
+  let effectiveUserId = userId
+  if (!effectiveUserId) {
+    effectiveUserId = getCurrentCustomer()?.id
+  }
+  if (!effectiveUserId && isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      effectiveUserId = session?.user?.id
+    } catch (e) {}
+  }
+
+  if (effectiveUserId) {
+    setLocalData(`${LOCAL_STORAGE_CART_KEY}_${effectiveUserId}`, items)
+
+    if (
+      isSupabaseConfigured &&
+      supabase &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId)
+    ) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            cart_data: items,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', effectiveUserId)
+      } catch (err) {
+        console.warn('Supabase cart_data update error:', err)
+      }
+    }
+  }
+}
+
+export async function loadAccountCart(userId = null) {
+  let effectiveUserId = userId
+  if (!effectiveUserId) {
+    effectiveUserId = getCurrentCustomer()?.id
+  }
+  if (!effectiveUserId && isSupabaseConfigured && supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      effectiveUserId = session?.user?.id
+    } catch (e) {}
+  }
+
+  let cached = []
+  if (effectiveUserId) {
+    cached = getLocalData(`${LOCAL_STORAGE_CART_KEY}_${effectiveUserId}`, [])
+  }
+  if (cached.length === 0) {
+    cached = getLocalData(LOCAL_STORAGE_CART_KEY, [])
+  }
+
+  if (
+    isSupabaseConfigured &&
+    supabase &&
+    effectiveUserId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveUserId)
+  ) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('cart_data')
+        .eq('id', effectiveUserId)
+        .maybeSingle()
+
+      if (!error && data?.cart_data && Array.isArray(data.cart_data)) {
+        if (data.cart_data.length > 0) {
+          saveLocalCart(data.cart_data)
+          setLocalData(`${LOCAL_STORAGE_CART_KEY}_${effectiveUserId}`, data.cart_data)
+          return data.cart_data
+        } else if (cached.length > 0) {
+          await saveCartToAccount(cached, effectiveUserId)
+          return cached
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase loadAccountCart error:', err)
+    }
+  }
+
+  return cached
+}
+
+// ── 7. USER ORDERS QUERY (List all orders for logged-in user) ──
+export async function getUserOrders(user = null) {
+  let current = user
+  if (!current) {
+    current = getCurrentCustomer()
+  }
+
+  const userId = current?.id
+  const email = current?.email?.trim().toLowerCase()
+  const phone = current?.phone?.replace(/[^0-9]/g, '')
+
+  let supabaseOrders = []
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let query = supabase
+        .from('orders')
+        .select('*, order_items(*), shipments(*, tracking_events(*))')
+        .order('created_at', { ascending: false })
+
+      const orFilters = []
+      if (userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+        orFilters.push(`user_id.eq.${userId}`)
+      }
+      if (email) {
+        orFilters.push(`customer_email.ilike.${email}`)
+      }
+      if (phone && phone.length >= 10) {
+        orFilters.push(`customer_phone.ilike.%${phone.slice(-10)}%`)
+      }
+
+      if (orFilters.length > 0) {
+        const { data, error } = await query.or(orFilters.join(','))
+        if (!error && data && Array.isArray(data)) {
+          supabaseOrders = data
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase getUserOrders error', e)
+    }
+  }
+
+  // Also combine with localStorage orders
+  const localOrders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+  const matchedLocal = localOrders.filter((o) => {
+    if (!current) return true
+    if (userId && o.user_id === userId) return true
+    if (email && o.customer_email?.toLowerCase() === email) return true
+    if (phone && o.customer_phone?.replace(/[^0-9]/g, '').includes(phone.slice(-10))) return true
+    return false
+  })
+
+  // Deduplicate by order_number
+  const orderMap = new Map()
+  for (const o of supabaseOrders) {
+    if (o.order_number) orderMap.set(o.order_number, o)
+  }
+  for (const o of matchedLocal) {
+    if (o.order_number && !orderMap.has(o.order_number)) {
+      orderMap.set(o.order_number, o)
+    }
+  }
+
+  return Array.from(orderMap.values()).sort(
+    (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  )
 }

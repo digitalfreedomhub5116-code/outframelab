@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
+import { getLocalCart, saveCartToAccount } from '../lib/db'
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
@@ -154,7 +155,15 @@ export const useCartStore = create((set, get) => ({
     persistProducts(defaults)
   },
 
-  items: [],
+  items: getLocalCart(),
+  setItems: (newItems) => {
+    set({ items: newItems })
+    saveCartToAccount(newItems)
+  },
+  clearCart: () => {
+    set({ items: [] })
+    saveCartToAccount([])
+  },
   isOpen: false,
   isCheckoutOpen: false,
   openCheckout: () => set({ isCheckoutOpen: true }),
@@ -205,21 +214,24 @@ export const useCartStore = create((set, get) => ({
 
   addItem: (product) => {
     const existing = get().items.find((item) => item.id === product.id)
+    let nextItems
     if (existing) {
-      set({
-        items: get().items.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        ),
-      })
+      nextItems = get().items.map((item) =>
+        item.id === product.id
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      )
     } else {
-      set({ items: [...get().items, { ...product, quantity: 1 }] })
+      nextItems = [...get().items, { ...product, quantity: 1 }]
     }
+    set({ items: nextItems })
+    saveCartToAccount(nextItems)
   },
 
   removeItem: (id) => {
-    set({ items: get().items.filter((item) => item.id !== id) })
+    const nextItems = get().items.filter((item) => item.id !== id)
+    set({ items: nextItems })
+    saveCartToAccount(nextItems)
   },
 
   updateQuantity: (id, quantity) => {
@@ -227,11 +239,11 @@ export const useCartStore = create((set, get) => ({
       get().removeItem(id)
       return
     }
-    set({
-      items: get().items.map((item) =>
-        item.id === id ? { ...item, quantity } : item
-      ),
-    })
+    const nextItems = get().items.map((item) =>
+      item.id === id ? { ...item, quantity } : item
+    )
+    set({ items: nextItems })
+    saveCartToAccount(nextItems)
   },
 
   getTotal: () => {

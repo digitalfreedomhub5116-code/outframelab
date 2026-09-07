@@ -10,7 +10,24 @@ import AuthCallbackPage from './pages/AuthCallbackPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmedPage from './pages/OrderConfirmedPage'
 
+import { initAuthListener, loadAccountCart } from './lib/db'
+
 export default function App() {
+  // Sync persistent account cart on auth change & listen to persistent user session
+  useEffect(() => {
+    const unsub = initAuthListener(async (user) => {
+      if (user?.id) {
+        try {
+          const accountCart = await loadAccountCart(user.id)
+          if (accountCart && accountCart.length > 0) {
+            useCartStore.getState().setItems(accountCart)
+          }
+        } catch (e) {}
+      }
+    })
+    return () => unsub && unsub()
+  }, [])
+
   // Re-open checkout if customer returned from Google OAuth redirect
   useEffect(() => {
     if (sessionStorage.getItem('outframe_checkout_pending') === 'true') {

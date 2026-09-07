@@ -349,8 +349,8 @@ export default function CheckoutPage() {
 
       const order = await createOrder(orderPayload)
 
-      // Clear cart
-      useCartStore.setState({ items: [] })
+      // Clear cart locally and from account
+      useCartStore.getState().clearCart()
       closeCart()
 
       // Redirect to Order Confirmed
