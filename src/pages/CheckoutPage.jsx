@@ -1206,13 +1206,13 @@ export default function CheckoutPage() {
               {/* Option 1: Cash on Delivery (COD) */}
               <label
                 onClick={() => setPaymentMethod('COD')}
-                className={`flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
                   paymentMethod === 'COD'
                     ? 'border-gold bg-charcoal shadow-lg shadow-gold/10'
                     : 'border-charcoal-light/80 bg-charcoal/50 hover:border-gold/30'
                 }`}
               >
-                <div className="pt-0.5">
+                <div className="shrink-0">
                   <div
                     className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
                       paymentMethod === 'COD'
@@ -1225,33 +1225,25 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Banknote className="h-4 w-4 text-gold" />
-                      <span className="font-heading text-sm sm:text-base font-bold text-cream">
-                        Cash on Delivery (COD)
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-charcoal-light text-cream-muted">
-                      Pay at doorstep
+                  <div className="flex items-center gap-2.5">
+                    <Banknote className="h-4 w-4 text-gold shrink-0" />
+                    <span className="font-heading text-sm sm:text-base font-bold text-cream">
+                      Cash on Delivery (COD)
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-cream-muted/70">
-                    Pay cash upon delivery at your doorstep when Delhivery or BlueDart courier arrives.
-                  </p>
                 </div>
               </label>
 
               {/* Option 2: UPI / QR / NetBanking */}
               <label
                 onClick={() => setPaymentMethod('PREPAID')}
-                className={`flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
                   paymentMethod === 'PREPAID'
                     ? 'border-gold bg-charcoal shadow-lg shadow-gold/10'
                     : 'border-charcoal-light/80 bg-charcoal/50 hover:border-gold/30'
                 }`}
               >
-                <div className="pt-0.5">
+                <div className="shrink-0">
                   <div
                     className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
                       paymentMethod === 'PREPAID'
@@ -1264,20 +1256,12 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-emerald-400" />
-                      <span className="font-heading text-sm sm:text-base font-bold text-cream">
-                        UPI / Instant QR / NetBanking
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      Priority Dispatch
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard className="h-4 w-4 text-emerald-400 shrink-0" />
+                    <span className="font-heading text-sm sm:text-base font-bold text-cream">
+                      UPI / Instant QR / NetBanking
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-cream-muted/70">
-                    Fastest dispatch from Maharashtra Hub. Instant verification with zero cash hassle.
-                  </p>
                 </div>
               </label>
             </div>
