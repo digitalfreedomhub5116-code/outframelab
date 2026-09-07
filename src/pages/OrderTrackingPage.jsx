@@ -66,21 +66,21 @@ export default function OrderTrackingPage() {
       key: 'CONFIRMED',
       step: '02',
       label: 'Confirmed & Crafted',
-      desc: 'Keychain 3D sculpted with authentic Antique Gold Patina finish',
+      desc: 'Keychain 3D sculpted with authentic Antique Gold PLA Patina finish',
       icon: Sparkles,
     },
     {
       key: 'PACKED',
       step: '03',
       label: 'Packed in Collector Tin',
-      desc: 'Carefully inspected and sealed in signature Outframe collector tin box',
+      desc: 'Carefully inspected and sealed',
       icon: Package,
     },
     {
       key: 'SHIPPED',
       step: '04',
       label: 'Shipped & In Transit',
-      desc: 'Handed over to courier partner (Delhivery Express) for express air transit',
+      desc: 'Handed over to courier partner',
       icon: Truck,
     },
     {
@@ -94,7 +94,7 @@ export default function OrderTrackingPage() {
       key: 'DELIVERED',
       step: '06',
       label: 'Delivered',
-      desc: 'Safely delivered to customer address with signature verification',
+      desc: 'Safely delivered to customer address',
       icon: Check,
     },
   ]
