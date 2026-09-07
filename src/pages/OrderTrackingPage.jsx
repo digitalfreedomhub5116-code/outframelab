@@ -5,14 +5,8 @@ import {
   Package,
   CheckCircle2,
   Clock,
-  Truck,
-  MapPin,
-  ExternalLink,
-  Copy,
   Check,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   ShoppingBag,
   RefreshCw,
   User,
@@ -48,10 +42,6 @@ export default function OrderTrackingPage() {
   const [searchedOrder, setSearchedOrder] = useState(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const [notFound, setNotFound] = useState(false)
-
-  // Expanded Order Cards (for viewing full courier tracking details)
-  const [expandedOrders, setExpandedOrders] = useState({})
-  const [copiedAwb, setCopiedAwb] = useState(null)
 
   // 6 Checkpoints matching Outframe Labs fulfillment pipeline
   const STAGES = [
@@ -173,20 +163,6 @@ export default function OrderTrackingPage() {
     }
     setSearchParams({ orderId: query.trim() })
     fetchSingleOrder(query.trim())
-  }
-
-  const toggleExpand = (orderNumber) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [orderNumber]: !prev[orderNumber],
-    }))
-  }
-
-  const handleCopyAwb = (awb) => {
-    if (!awb) return
-    navigator.clipboard.writeText(awb)
-    setCopiedAwb(awb)
-    setTimeout(() => setCopiedAwb(null), 2000)
   }
 
   // Unified list of orders to display (NEVER duplicate sections)
@@ -361,10 +337,6 @@ export default function OrderTrackingPage() {
                 <OrderCard
                   key={ord.order_number || ord.id}
                   order={ord}
-                  isExpanded={Boolean(expandedOrders[ord.order_number])}
-                  onToggleExpand={() => toggleExpand(ord.order_number)}
-                  onCopyAwb={handleCopyAwb}
-                  copiedAwb={copiedAwb}
                   STAGES={STAGES}
                   getStageIndex={getStageIndex}
                 />
@@ -385,10 +357,6 @@ export default function OrderTrackingPage() {
 // ── COMPONENT: SINGLE ORDER CARD (One Below Other with Vertical Checkpoints) ──
 function OrderCard({
   order,
-  isExpanded,
-  onToggleExpand,
-  onCopyAwb,
-  copiedAwb,
   STAGES,
   getStageIndex
 }) {
@@ -619,104 +587,6 @@ function OrderCard({
             })}
           </div>
         </div>
-
-        {/* ── 4. Toggle Detailed Courier Timeline Button ── */}
-        <div className="pt-2 flex items-center justify-between border-t border-charcoal-light/70">
-          <button
-            type="button"
-            onClick={onToggleExpand}
-            className="flex items-center gap-2 text-xs font-bold text-gold hover:text-yellow-200 transition-colors cursor-pointer"
-          >
-            <span>{isExpanded ? 'Hide Courier Details' : 'View Full Courier Details'}</span>
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-        </div>
-
-        {/* ── 5. Collapsible Live Courier Details & Checkpoints ── */}
-        {isExpanded && (
-          <div className="pt-4 border-t border-charcoal-light/70 space-y-4 animate-fade-in-up">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              {/* Courier & AWB */}
-              <div className="rounded-xl border border-charcoal-light bg-obsidian/70 p-4 space-y-2">
-                <p className="font-bold text-gold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5" /> Courier Logistics
-                </p>
-                <div className="flex justify-between">
-                  <span className="text-cream-muted">Partner:</span>
-                  <span className="font-bold text-cream">{order.shipment?.courier_partner || 'Delhivery Express'}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-cream-muted">AWB Code:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-gold font-bold">{order.shipment?.awb_code || 'DLV8492048'}</span>
-                    <button
-                      type="button"
-                      onClick={() => onCopyAwb(order.shipment?.awb_code)}
-                      className="text-cream-muted hover:text-cream cursor-pointer"
-                      title="Copy AWB"
-                    >
-                      {copiedAwb === order.shipment?.awb_code ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                {order.shipment?.awb_code && (
-                  <div className="pt-1">
-                    <a
-                      href={`https://www.delhivery.com/track/package/${order.shipment.awb_code}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-gold hover:underline font-semibold"
-                    >
-                      Track on Delhivery Portal <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {/* Destination Address */}
-              <div className="rounded-xl border border-charcoal-light bg-obsidian/70 p-4 space-y-1">
-                <p className="font-bold text-gold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5" /> Delivery Address
-                </p>
-                <p className="font-bold text-cream">{order.shipping_address?.full_name || order.customer_name}</p>
-                <p className="text-cream-muted">{order.shipping_address?.street_address}</p>
-                <p className="text-cream-muted">
-                  {order.shipping_address?.city}, {order.shipping_address?.state} - {order.shipping_address?.pincode}
-                </p>
-                <p className="text-cream-muted/60 pt-1">Phone: {order.shipping_address?.phone || order.customer_phone}</p>
-              </div>
-            </div>
-
-            {/* Checkpoint Milestones */}
-            <div className="rounded-xl border border-charcoal-light bg-obsidian/70 p-4">
-              <p className="font-bold text-gold uppercase tracking-wider text-[10px] mb-3 flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Live Checkpoint Milestones
-              </p>
-              <div className="space-y-3">
-                {(order.tracking_events || []).map((evt, idx) => (
-                  <div key={evt.id || idx} className="flex items-start gap-3 text-xs">
-                    <div className="h-5 w-5 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center text-gold shrink-0 mt-0.5">
-                      <Check className="h-3 w-3" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-cream">{evt.activity}</span>
-                        <span className="text-[10px] text-cream-muted/50 font-mono">
-                          {new Date(evt.event_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-cream-muted/60 block">{evt.location || 'Maharashtra Hub'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
