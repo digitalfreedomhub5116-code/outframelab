@@ -389,6 +389,36 @@ export async function updateOrderStatus(orderId, orderNumber, newStatus) {
   }
 }
 
+export async function deleteOrder(orderId, orderNumber) {
+  const isUUID = orderId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+  const cleanNum = String(orderNumber || orderId || '').replace(/^#\s*/, '').trim()
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (isUUID) {
+        await supabase.from('orders').delete().eq('id', orderId)
+      }
+      if (cleanNum) {
+        await supabase.from('orders').delete().or(`order_number.eq.${cleanNum},order_number.eq.#${cleanNum}`)
+      }
+    } catch (e) {
+      console.warn('Supabase deleteOrder error', e)
+    }
+  }
+
+  // Also remove from local storage cache
+  try {
+    const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
+    const updated = orders.filter((o) => {
+      const matchNum = o.order_number?.toUpperCase() === cleanNum.toUpperCase() || o.id === orderId
+      return !matchNum
+    })
+    setLocalData(LOCAL_STORAGE_ORDERS_KEY, updated)
+  } catch (e) {}
+
+  return true
+}
+
 // ── 3. SIMULATE / ADVANCE ORDER STATUS (For Live Testing & Demos) ──
 export function advanceOrderStatus(orderNumber) {
   const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])

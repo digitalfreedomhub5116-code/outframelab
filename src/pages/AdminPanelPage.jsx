@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { GENRES } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
-import { saveProduct, getAllOrders, updateOrderStatus } from '../lib/db'
+import { saveProduct, getAllOrders, updateOrderStatus, deleteOrder } from '../lib/db'
 
 
 
@@ -450,6 +450,7 @@ export default function AdminPanelPage() {
   const [shiprocketConnected, setShiprocketConnected] = useState(null)
   const [isSyncingStatuses, setIsSyncingStatuses] = useState(false)
   const [cancellingOrder, setCancellingOrder] = useState({})
+  const [deletingOrder, setDeletingOrder] = useState({})
 
   useEffect(() => {
     fetch('/api/generate-awb')
@@ -595,6 +596,91 @@ export default function AdminPanelPage() {
     }
   }
 
+  // Permanently remove a cancelled or test order from list and database
+  const handleDeleteOrder = async (orderId) => {
+    const targetOrder = orders.find(
+      (o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId
+    )
+    if (!targetOrder) {
+      showToast('Order record not found.', 'error')
+      return
+    }
+
+    const orderDisplay = targetOrder.order_number || targetOrder.id || orderId
+    const confirmed = window.confirm(
+      `Remove Order #${orderDisplay} permanently from the list?\n\nThis will remove this cancelled order record from your dashboard and database.`
+    )
+    if (!confirmed) return
+
+    setDeletingOrder((prev) => ({ ...prev, [orderId]: true }))
+
+    try {
+      // 1. Call server API to delete from database
+      await fetch('/api/generate-awb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          orderId: targetOrder.db_id || targetOrder.id || orderId,
+          orderNumber: targetOrder.order_number || targetOrder.id || orderId,
+        }),
+      })
+
+      // 2. Direct Supabase delete fallback
+      await deleteOrder(targetOrder.db_id || targetOrder.id, targetOrder.order_number)
+
+      // 3. Update local state
+      setOrders((prev) =>
+        prev.filter((o) => !(o.id === orderId || o.order_number === orderId || o.db_id === orderId))
+      )
+
+      showToast(`Order #${orderDisplay} removed from list.`, 'success')
+    } catch (err) {
+      showToast('Error removing order: ' + err.message, 'error')
+    } finally {
+      setDeletingOrder((prev) => ({ ...prev, [orderId]: false }))
+    }
+  }
+
+  // Remove all cancelled orders at once
+  const handleClearAllCancelled = async () => {
+    const cancelledOrders = orders.filter((o) => o.status === 'CANCELLED')
+    if (cancelledOrders.length === 0) {
+      showToast('No cancelled orders found in the list.', 'info')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Permanently remove all ${cancelledOrders.length} cancelled order(s) from the list?`
+    )
+    if (!confirmed) return
+
+    setIsSyncingStatuses(true)
+    try {
+      for (const ord of cancelledOrders) {
+        await deleteOrder(ord.db_id || ord.id, ord.order_number)
+        try {
+          await fetch('/api/generate-awb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'delete',
+              orderId: ord.db_id || ord.id,
+              orderNumber: ord.order_number || ord.id,
+            }),
+          })
+        } catch (e) {}
+      }
+
+      setOrders((prev) => prev.filter((o) => o.status !== 'CANCELLED'))
+      showToast(`${cancelledOrders.length} cancelled order(s) removed from list.`, 'success')
+    } catch (err) {
+      showToast('Error removing cancelled orders: ' + err.message, 'error')
+    } finally {
+      setIsSyncingStatuses(false)
+    }
+  }
+
   // Poll Shiprocket API to sync cancellation statuses & courier tracking
   const handleSyncShiprocketStatuses = async () => {
     setIsSyncingStatuses(true)
@@ -621,6 +707,8 @@ export default function AdminPanelPage() {
 
           return {
             id: o.order_number || o.id,
+            db_id: o.id,
+            order_number: o.order_number || o.id,
             customer_name: o.customer_name || 'Collector',
             customer_phone: o.customer_phone || '+91 98765 00000',
             customer_email: o.customer_email || 'orders@outframelabs.in',
@@ -1599,6 +1687,7 @@ export default function AdminPanelPage() {
                     {['ALL', 'Payment Received', 'Printing on Kobra 2 Neo', 'Packed', 'Shipped', 'CANCELLED'].map(
                       (st) => {
                         const isActive = statusFilter === st
+                        const count = st === 'ALL' ? orders.length : orders.filter((o) => o.status === st).length
                         return (
                           <button
                             key={st}
@@ -1609,12 +1698,25 @@ export default function AdminPanelPage() {
                                 : 'bg-charcoal border border-charcoal-light text-cream-muted hover:text-cream hover:border-gold/30'
                             }`}
                           >
-                            {st === 'ALL' ? 'All Orders' : st === 'CANCELLED' ? 'Cancelled' : st}
+                            {st === 'ALL' ? 'All Orders' : st === 'CANCELLED' ? `Cancelled (${count})` : st}
                           </button>
                         )
                       }
                     )}
                   </div>
+
+                  {orders.some((o) => o.status === 'CANCELLED') && (
+                    <button
+                      type="button"
+                      onClick={handleClearAllCancelled}
+                      disabled={isSyncingStatuses}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold hover:bg-red-500/20 hover:text-red-300 transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap ml-1 shrink-0"
+                      title="Permanently remove all cancelled orders from the list and database"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear Cancelled ({orders.filter((o) => o.status === 'CANCELLED').length})</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -1776,13 +1878,29 @@ export default function AdminPanelPage() {
                             {/* Actions / Generate AWB / Cancel on Shiprocket */}
                             <td className="px-5 py-4 align-top text-right whitespace-nowrap">
                               {order.status === 'CANCELLED' ? (
-                                <div className="inline-flex flex-col items-end gap-1">
-                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/40 text-xs font-semibold text-red-400 shadow-sm">
-                                    <XCircle className="w-3.5 h-3.5 text-red-400" />
-                                    <span>Cancelled on Shiprocket</span>
+                                <div className="inline-flex flex-col items-end gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/40 text-xs font-semibold text-red-400 shadow-sm">
+                                      <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                      <span>Cancelled on Shiprocket</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteOrder(order.id)}
+                                      disabled={deletingOrder[order.id]}
+                                      title="Remove cancelled order permanently from list and database"
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 hover:border-red-500/60 text-red-400 hover:text-red-300 text-xs font-medium transition-all cursor-pointer disabled:opacity-50 group"
+                                    >
+                                      {deletingOrder[order.id] ? (
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                                      )}
+                                      <span>Remove</span>
+                                    </button>
                                   </div>
                                   <span
-                                    className="text-[10px] text-cream-muted/50 max-w-[170px] truncate text-right"
+                                    className="text-[10px] text-cream-muted/50 max-w-[220px] truncate text-right"
                                     title={order.cancellation_reason || 'Merchant Cancelled'}
                                   >
                                     {order.cancellation_reason || 'Shipment Voided'}

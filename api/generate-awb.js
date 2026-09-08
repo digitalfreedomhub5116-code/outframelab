@@ -197,6 +197,20 @@ export default async function handler(req, res) {
       }
     }
 
+    // Delete order action via GET
+    if (action === 'delete' && (orderParam || query.orderNumber)) {
+      try {
+        const result = await handleDeleteOrder({
+          supabase,
+          orderId: orderParam,
+          orderNumber: query.orderNumber || orderParam,
+        })
+        return sendJson(res, result.success ? 200 : 400, result)
+      } catch (err) {
+        return sendJson(res, 500, { success: false, error: err.message })
+      }
+    }
+
     // Sync status with Shiprocket via GET
     if (action === 'sync') {
       try {
@@ -229,6 +243,16 @@ export default async function handler(req, res) {
     const action = body.action
     const orderId = body.orderId || body.order_id
     const fallbackOrderData = body.orderData || null
+
+    // Delete order action via POST
+    if (action === 'delete') {
+      const result = await handleDeleteOrder({
+        supabase,
+        orderId: orderId || fallbackOrderData?.id,
+        orderNumber: body.orderNumber || fallbackOrderData?.order_number,
+      })
+      return sendJson(res, result.success ? 200 : 400, result)
+    }
 
     // Cancel order action via POST
     if (action === 'cancel' && (orderId || fallbackOrderData?.id || fallbackOrderData?.order_number)) {
@@ -824,6 +848,60 @@ async function handleCancelOrder({
     message: `Order cancellation processed.`,
     shiprocket_cancelled: shiprocketCancelled,
     shiprocket_response: shiprocketMsg,
+  }
+}
+
+/**
+ * Handle permanently deleting an order and associated records from database
+ */
+async function handleDeleteOrder({ supabase, orderId, orderNumber = null }) {
+  if (!supabase) {
+    supabase = getSupabaseClient()
+  }
+
+  const rawId = String(orderId || orderNumber || '').trim()
+  const cleanId = rawId.replace(/^#\s*/, '').trim()
+
+  if (!cleanId) {
+    return { success: false, error: 'Order identifier is required for deletion.' }
+  }
+
+  if (supabase) {
+    try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
+
+      // Locate the order UUID if passed as order_number
+      let orderUuid = isUUID ? cleanId : null
+      if (!orderUuid) {
+        const { data: ord } = await supabase
+          .from('orders')
+          .select('id')
+          .or(`order_number.eq.${cleanId},order_number.eq.#${cleanId}`)
+          .maybeSingle()
+        if (ord?.id) {
+          orderUuid = ord.id
+        }
+      }
+
+      // Delete dependent records first to ensure clean cascade
+      if (orderUuid) {
+        await supabase.from('tracking_events').delete().eq('order_id', orderUuid)
+        await supabase.from('order_items').delete().eq('order_id', orderUuid)
+        await supabase.from('shipments').delete().eq('order_id', orderUuid)
+        await supabase.from('orders').delete().eq('id', orderUuid)
+      } else {
+        await supabase.from('orders').delete().or(`order_number.eq.${cleanId},order_number.eq.#${cleanId}`)
+      }
+    } catch (err) {
+      console.warn('Supabase delete error:', err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  return {
+    success: true,
+    message: `Order #${cleanId} deleted from database.`,
+    order_id: cleanId,
   }
 }
 
