@@ -1,11 +1,14 @@
 import { useScrollReveal } from '../hooks/useScrollReveal'
-import { GENRES } from '../store/cartStore'
+import { GENRES, useCartStore } from '../store/cartStore'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUpRight } from 'lucide-react'
 
 function GenreCard({ genre, index }) {
   const navigate = useNavigate()
   const [ref, isVisible] = useScrollReveal(0.1)
+  const allProducts = useCartStore((s) => s.products)
+  const visibleCount = allProducts.filter((p) => p.genre === genre.id && !p.isHidden).length
+  const isComingSoon = visibleCount === 0
 
   const handleClick = () => {
     navigate(`/${genre.slug}`)
@@ -45,13 +48,34 @@ function GenreCard({ genre, index }) {
       <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/45 to-transparent transition-opacity duration-300 group-hover:opacity-85" />
       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
 
-      {/* Content: ONLY Heading & Subtle Arrow Indicator */}
-      <div className="absolute inset-0 flex items-end justify-between p-5 sm:p-6 lg:p-7">
-        <h3 className="font-heading text-2xl font-bold tracking-tight text-cream transition-colors duration-300 group-hover:text-gold sm:text-3xl lg:text-4xl">
-          {genre.label}
-        </h3>
+      {/* Coming Soon Top Badge */}
+      {isComingSoon && (
+        <div className="absolute top-4 left-4 sm:top-5 sm:left-5 z-10">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-obsidian/90 text-gold border border-gold/40 shadow-lg backdrop-blur-md">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold animate-ping" />
+            Coming Soon
+          </span>
+        </div>
+      )}
 
-        <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-gold/30 bg-obsidian/70 text-gold backdrop-blur-md transition-all duration-300 group-hover:scale-110 group-hover:bg-gold group-hover:text-obsidian group-hover:border-gold">
+      {/* Content: Heading, Status & Arrow Indicator */}
+      <div className="absolute inset-0 flex items-end justify-between p-5 sm:p-6 lg:p-7">
+        <div>
+          <h3 className="font-heading text-2xl font-bold tracking-tight text-cream transition-colors duration-300 group-hover:text-gold sm:text-3xl lg:text-4xl">
+            {genre.label}
+          </h3>
+          {isComingSoon ? (
+            <span className="text-xs text-gold/80 font-medium block mt-0.5">
+              Designs Forging Soon
+            </span>
+          ) : (
+            <span className="text-xs text-cream-muted/70 font-medium block mt-0.5">
+              {visibleCount} Artifacts
+            </span>
+          )}
+        </div>
+
+        <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-gold/30 bg-obsidian/70 text-gold backdrop-blur-md transition-all duration-300 group-hover:scale-110 group-hover:bg-gold group-hover:text-obsidian group-hover:border-gold shrink-0">
           <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
       </div>

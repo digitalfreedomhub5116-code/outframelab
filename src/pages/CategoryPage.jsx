@@ -1,12 +1,21 @@
 import { useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ShoppingBag, Star, Heart } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ShoppingBag, Star, Heart, Sparkles } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS, useCartStore } from '../store/cartStore'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
 import ReviewsModal from '../components/ReviewsModal'
 import WishlistDrawer from '../components/WishlistDrawer'
+
+const GENRE_COMING_SOON_GIFS = {
+  MARVEL: 'https://media.tenor.com/cUDKyJkDr6kAAAAM/iron-man-iron-man-hammer.gif',
+  DC: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
+  ANIME: 'https://media.tenor.com/A8rfrx1u11YAAAAM/forge-blacksmiths.gif',
+  CARS: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
+  VALORANT: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
+  DEFAULT: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
+}
 
 function ProductCard({ product }) {
   const navigate = useNavigate()
@@ -227,9 +236,18 @@ export default function CategoryPage() {
             </div>
 
             <div className="rounded-xl border border-gold/20 bg-charcoal/80 px-4 py-2.5 backdrop-blur-sm self-start sm:self-end">
-              <span className="text-xs text-cream-muted/70 block">Total Artifacts</span>
-              <span className="font-heading text-lg font-bold text-gold">
-                {products.length} Designs
+              <span className="text-xs text-cream-muted/70 block">
+                {products.length > 0 ? 'Total Artifacts' : 'Collection Status'}
+              </span>
+              <span className="font-heading text-lg font-bold text-gold flex items-center gap-1.5">
+                {products.length > 0 ? (
+                  `${products.length} Designs`
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 text-gold animate-pulse" />
+                    <span>Coming Soon</span>
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -239,33 +257,107 @@ export default function CategoryPage() {
       {/* Products Section */}
       <section className="relative py-12 sm:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          {/* Products Grid */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+          {products.length > 0 ? (
+            /* Products Grid */
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            /* Coming Soon Showcase with High-Quality GIF */
+            <div className="my-4 mx-auto max-w-2xl rounded-3xl border border-gold/30 bg-charcoal/90 p-6 sm:p-10 text-center shadow-2xl backdrop-blur-md relative overflow-hidden">
+              {/* Background ambient gold glow */}
+              <div className="absolute -top-24 -left-24 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Glowing pill badge */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-gold mb-6 shadow-sm">
+                <Sparkles className="h-3.5 w-3.5 text-gold animate-spin" />
+                <span>In The Workshop · Coming Soon</span>
+              </div>
+
+              {/* Animated GIF Container */}
+              <div className="relative mx-auto max-w-md overflow-hidden rounded-2xl border border-gold/30 shadow-2xl shadow-black/90 bg-obsidian group">
+                <img
+                  src={GENRE_COMING_SOON_GIFS[genre.id] || GENRE_COMING_SOON_GIFS.DEFAULT}
+                  alt={`${genre.label} designs crafting soon`}
+                  className="w-full h-56 sm:h-64 object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                  loading="eager"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-obsidian/95 via-transparent to-transparent opacity-85" />
+                <div className="absolute bottom-3 inset-x-3 flex items-center justify-between text-[11px] text-cream-muted/90 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg">
+                  <span className="font-mono text-gold flex items-center gap-1.5 font-semibold">
+                    <span className="h-2 w-2 rounded-full bg-gold animate-ping" />
+                    3D Printing in Progress
+                  </span>
+                  <span className="font-medium text-cream/80">Antique Gold Finish</span>
+                </div>
+              </div>
+
+              {/* Heading & Subtitle */}
+              <h2 className="mt-7 font-heading text-2xl sm:text-3xl font-bold text-cream">
+                {genre.label} Artifacts Are Forging
+              </h2>
+              <p className="mt-3 max-w-lg mx-auto text-sm sm:text-base leading-relaxed text-cream-muted/80">
+                Our 3D print lab is currently designing and prototyping brand new outframed keychains for the{' '}
+                <strong className="text-gold font-semibold">{genre.label}</strong> universe. Check back soon for the next drop!
+              </p>
+
+              {/* Action Buttons */}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  to="/"
+                  className="btn-gold inline-flex items-center gap-2 rounded-full px-6 py-3 text-xs font-bold uppercase tracking-widest shadow-lg shadow-gold/20"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Browse All Keychains</span>
+                </Link>
+                {otherGenres.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('explore-other-genres')
+                      if (el) el.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-charcoal px-6 py-3 text-xs font-bold uppercase tracking-widest text-gold transition-colors hover:bg-gold hover:text-obsidian"
+                  >
+                    <span>Explore Other Universes</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Other Universes Switcher */}
-          <div className="mt-20 pt-10 border-t border-gold/15">
+          <div id="explore-other-genres" className="mt-20 pt-10 border-t border-gold/15">
             <h3 className="font-heading text-xl font-bold text-cream mb-4">
               Explore More Universes
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-              {otherGenres.map((og) => (
-                <button
-                  key={og.id}
-                  onClick={() => {
-                    navigate(`/${og.slug}`)
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                  className="group relative overflow-hidden rounded-xl border border-charcoal-light/70 bg-charcoal p-4 text-left transition-all duration-300 hover:border-gold/50 hover:bg-charcoal-light"
-                >
-                  <span className="font-heading text-base sm:text-lg font-bold text-cream group-hover:text-gold transition-colors">
-                    {og.label} →
-                  </span>
-                </button>
-              ))}
+              {otherGenres.map((og) => {
+                const ogCount = allProducts.filter((p) => p.genre === og.id && !p.isHidden).length
+                return (
+                  <button
+                    key={og.id}
+                    onClick={() => {
+                      navigate(`/${og.slug}`)
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    className="group relative overflow-hidden rounded-xl border border-charcoal-light/70 bg-charcoal p-4 text-left transition-all duration-300 hover:border-gold/50 hover:bg-charcoal-light flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-heading text-base sm:text-lg font-bold text-cream group-hover:text-gold transition-colors block">
+                        {og.label}
+                      </span>
+                      <span className="text-[11px] text-cream-muted/60">
+                        {ogCount > 0 ? `${ogCount} Designs` : 'Coming Soon'}
+                      </span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-cream-muted/50 group-hover:text-gold group-hover:translate-x-1 transition-all" />
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
