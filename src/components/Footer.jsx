@@ -64,20 +64,6 @@ export default function Footer() {
                   </a>
                 </li>
               ))}
-              <li>
-                <button
-                  onClick={() => {
-                    navigate('/admin-panel-access')
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                  className="text-sm text-cream-muted/60 transition-colors hover:text-gold text-left flex items-center gap-1.5"
-                >
-                  <span>Admin Portal</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold/15 text-gold border border-gold/30 font-mono">
-                    HQ
-                  </span>
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -113,15 +99,6 @@ export default function Footer() {
                 {link}
               </a>
             ))}
-            <button
-              onClick={() => {
-                navigate('/admin-panel-access')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-              className="text-xs text-cream-muted/40 transition-colors hover:text-gold"
-            >
-              Admin Access
-            </button>
           </div>
         </div>
       </div>

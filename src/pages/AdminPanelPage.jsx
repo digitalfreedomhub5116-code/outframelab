@@ -38,7 +38,8 @@ import {
   RotateCcw,
   Globe,
   Ban,
-  XCircle
+  XCircle,
+  Lock
 } from 'lucide-react'
 import { GENRES } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -388,7 +389,54 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
   )
 }
 
+const MASTER_ADMIN_PASSWORD = 'outframe@5116'
+const AUTH_KEY_DEVICE = 'outframe_admin_device_authenticated'
+const AUTH_KEY_SESSION = 'outframe_admin_session_authenticated'
+
 export default function AdminPanelPage() {
+  // Authentication & Device Remember State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const isDeviceAuth = localStorage.getItem(AUTH_KEY_DEVICE) === 'true'
+        const isSessionAuth = sessionStorage.getItem(AUTH_KEY_SESSION) === 'true'
+        return isDeviceAuth || isSessionAuth
+      }
+    } catch (e) {}
+    return false
+  })
+  const [passwordInput, setPasswordInput] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberDevice, setRememberDevice] = useState(true)
+  const [authError, setAuthError] = useState('')
+
+  const handlePasswordSubmit = (e) => {
+    e?.preventDefault?.()
+    if (passwordInput === MASTER_ADMIN_PASSWORD) {
+      setAuthError('')
+      try {
+        if (rememberDevice) {
+          localStorage.setItem(AUTH_KEY_DEVICE, 'true')
+        } else {
+          sessionStorage.setItem(AUTH_KEY_SESSION, 'true')
+        }
+      } catch (e) {}
+      setIsAuthenticated(true)
+    } else {
+      setAuthError('Incorrect password. Access denied.')
+    }
+  }
+
+  const handleAdminLogout = () => {
+    try {
+      localStorage.removeItem(AUTH_KEY_DEVICE)
+      sessionStorage.removeItem(AUTH_KEY_SESSION)
+    } catch (e) {}
+    setIsAuthenticated(false)
+    setPasswordInput('')
+    setAuthError('')
+  }
+
   const [activeTab, setActiveTab] = useState('overview')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -457,6 +505,7 @@ export default function AdminPanelPage() {
   const [deletingOrder, setDeletingOrder] = useState({})
 
   useEffect(() => {
+    if (!isAuthenticated) return
     fetch('/api/generate-awb')
       .then((res) => res.json())
       .then((data) => {
@@ -467,10 +516,11 @@ export default function AdminPanelPage() {
         }
       })
       .catch(() => setShiprocketConnected(false))
-  }, [])
+  }, [isAuthenticated])
 
   // Load orders from Supabase + LocalStorage fallback
   useEffect(() => {
+    if (!isAuthenticated) return
     let isMounted = true
     async function fetchOrders() {
       try {
@@ -531,7 +581,7 @@ export default function AdminPanelPage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [isAuthenticated])
 
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type })
@@ -1164,6 +1214,122 @@ export default function AdminPanelPage() {
     }
   }
 
+  // ── MASTER PASSWORD GATE SCREEN ──
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-obsidian flex flex-col justify-between text-cream selection:bg-gold/30">
+        {/* Ambient background glow */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gold/5 rounded-full blur-3xl" />
+        </div>
+
+        {/* Minimal Header */}
+        <header className="relative z-10 border-b border-gold/15 bg-charcoal/60 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+          <Link
+            to="/"
+            className="font-heading text-lg font-bold tracking-[0.2em] text-cream hover:text-gold transition-colors"
+          >
+            OUTFRAME
+          </Link>
+          <Link
+            to="/"
+            className="text-xs font-semibold text-cream-muted hover:text-gold transition-colors flex items-center gap-1.5"
+          >
+            ← Back to Store
+          </Link>
+        </header>
+
+        {/* Password Gate Card */}
+        <div className="relative z-10 flex-1 flex items-center justify-center px-4 py-12">
+          <div className="w-full max-w-md rounded-3xl border border-gold/30 bg-charcoal/90 p-8 sm:p-10 shadow-2xl shadow-black/80 backdrop-blur-xl">
+            {/* Lock / Shield Icon */}
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-gold/40 bg-gold/10 text-gold shadow-lg shadow-gold/20 mb-6">
+              <ShieldCheck className="h-8 w-8" />
+            </div>
+
+            <div className="text-center">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold/10 border border-gold/30 text-gold text-[11px] font-mono font-semibold uppercase tracking-wider mb-2">
+                <Lock className="w-3 h-3" /> Restricted Access
+              </div>
+              <h1 className="font-heading text-2xl sm:text-3xl font-bold text-cream tracking-tight">
+                Admin Portal
+              </h1>
+              <p className="mt-2 text-xs sm:text-sm text-cream-muted leading-relaxed">
+                Enter your security password to access the operations headquarters.
+              </p>
+            </div>
+
+            <form onSubmit={handlePasswordSubmit} className="mt-8 space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gold mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value)
+                      if (authError) setAuthError('')
+                    }}
+                    placeholder="Enter master password"
+                    autoFocus
+                    required
+                    className="w-full rounded-xl border border-gold/30 bg-obsidian/90 px-4 py-3 text-sm text-cream placeholder-cream-muted/40 outline-none transition-all focus:border-gold focus:ring-1 focus:ring-gold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-cream-muted hover:text-gold transition-colors p-1 cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember Device Checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer group select-none p-3 rounded-xl border border-gold/15 bg-obsidian/50 hover:border-gold/30 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gold/40 bg-charcoal text-gold focus:ring-gold accent-amber-500 cursor-pointer shrink-0"
+                />
+                <div className="text-xs text-cream-muted group-hover:text-cream transition-colors leading-tight">
+                  <span className="font-semibold text-cream">Remember this device</span>
+                  <p className="text-[11px] text-cream-muted/70 mt-0.5">
+                    Stay authenticated so you won't need to enter the password again on this browser.
+                  </p>
+                </div>
+              </label>
+
+              {authError && (
+                <div className="flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2.5 text-xs text-rose-400">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="btn-gold w-full py-3.5 rounded-xl text-xs font-bold uppercase tracking-widest shadow-xl shadow-gold/20 flex items-center justify-center gap-2 cursor-pointer hover:shadow-gold/40 transition-all"
+              >
+                <span>Access Admin Panel</span>
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Minimal Footer */}
+        <footer className="relative z-10 border-t border-gold/10 py-4 text-center text-xs text-cream-muted/40">
+          © 2026 Outframe Labs · Confidential Management Console
+        </footer>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-obsidian text-cream flex">
       {/* Toast Notification */}
@@ -1297,6 +1463,15 @@ export default function AdminPanelPage() {
             <ExternalLink className="w-3.5 h-3.5" />
             <span>View Public Store</span>
           </Link>
+
+          <button
+            onClick={handleAdminLogout}
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-rose-500/25 text-xs font-medium text-rose-400 hover:text-rose-300 hover:border-rose-500/50 hover:bg-rose-500/10 transition-colors cursor-pointer"
+            title="Lock admin session and clear remembered device"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>Lock Admin Portal</span>
+          </button>
         </div>
       </aside>
 
@@ -1351,6 +1526,15 @@ export default function AdminPanelPage() {
                 <span>Add Product</span>
               </button>
             )}
+
+            <button
+              onClick={handleAdminLogout}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 text-xs font-medium transition-colors cursor-pointer"
+              title="Lock Admin Portal & Forget Device"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lock Portal</span>
+            </button>
           </div>
         </header>
 

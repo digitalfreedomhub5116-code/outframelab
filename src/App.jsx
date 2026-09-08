@@ -47,6 +47,7 @@ export default function App() {
         <Route path="/track-order" element={<OrderTrackingPage />} />
         <Route path="/track-order/:orderId" element={<OrderTrackingPage />} />
         <Route path="/admin-panel-access" element={<AdminPanelPage />} />
+        <Route path="/admin" element={<AdminPanelPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/product/:productIdOrSlug" element={<ProductPage />} />
         <Route path="/:genreSlug" element={<CategoryPage />} />
