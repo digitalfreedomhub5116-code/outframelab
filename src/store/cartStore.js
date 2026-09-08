@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
+import { MOCK_PRODUCTS, GENRES, buildProductReviews } from '../data/productsData'
 import { getLocalCart, saveCartToAccount, saveProduct, deleteProductFromDb } from '../lib/db'
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
@@ -11,11 +11,34 @@ const loadInitialProducts = () => {
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((p) => ({
-          ...p,
-          inStock: p.inStock !== false,
-          isHidden: p.isHidden === true,
-        }))
+        return parsed.map((p) => {
+          const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(p.id) || m.slug === p.slug)
+          const fallbackReviews = mock?.reviews || buildProductReviews(p)
+          const fallbackGallery = Array.isArray(p.gallery) && p.gallery.length > 0
+            ? p.gallery
+            : (mock?.gallery || (p.image ? [p.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']))
+
+          return {
+            ...mock,
+            ...p,
+            gallery: fallbackGallery,
+            reviews: Array.isArray(p.reviews) && p.reviews.length > 0 ? p.reviews : fallbackReviews,
+            description: p.description || mock?.description || `Handcrafted antique gold ${p.name} outframed keychain.`,
+            features: Array.isArray(p.features) && p.features.length > 0 ? p.features : (mock?.features || [
+              'Each keychain is made from bio degradable PLA material.',
+              'Strong and durable keyring',
+              'Antique gold finish',
+              'Durable.',
+              'Dimensions: 64mm * 43mm',
+            ]),
+            rating: Number(p.rating) || mock?.rating || 4.8,
+            reviewCount: Number(p.reviewCount) || mock?.reviewCount || fallbackReviews.length || 12,
+            discountBadge: p.discountBadge || mock?.discountBadge || (Number(p.price) === 189 ? '-58%' : '-46%'),
+            discountPercent: p.discountPercent || mock?.discountPercent || (Number(p.price) === 189 ? 58 : 46),
+            inStock: p.inStock !== false,
+            isHidden: p.isHidden === true,
+          }
+        })
       }
     }
   } catch (e) {
@@ -42,11 +65,34 @@ export const useCartStore = create((set, get) => ({
 
   setProducts: (products) => {
     if (!Array.isArray(products) || products.length === 0) return
-    const normalized = products.map((p) => ({
-      ...p,
-      inStock: p.inStock !== false,
-      isHidden: p.isHidden === true,
-    }))
+    const normalized = products.map((p) => {
+      const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(p.id) || m.slug === p.slug)
+      const fallbackReviews = mock?.reviews || buildProductReviews(p)
+      const fallbackGallery = Array.isArray(p.gallery) && p.gallery.length > 0
+        ? p.gallery
+        : (mock?.gallery || (p.image ? [p.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']))
+
+      return {
+        ...mock,
+        ...p,
+        gallery: fallbackGallery,
+        reviews: Array.isArray(p.reviews) && p.reviews.length > 0 ? p.reviews : fallbackReviews,
+        description: p.description || mock?.description || `Handcrafted antique gold ${p.name} outframed keychain.`,
+        features: Array.isArray(p.features) && p.features.length > 0 ? p.features : (mock?.features || [
+          'Each keychain is made from bio degradable PLA material.',
+          'Strong and durable keyring',
+          'Antique gold finish',
+          'Durable.',
+          'Dimensions: 64mm * 43mm',
+        ]),
+        rating: Number(p.rating) || mock?.rating || 4.8,
+        reviewCount: Number(p.reviewCount) || mock?.reviewCount || fallbackReviews.length || 12,
+        discountBadge: p.discountBadge || mock?.discountBadge || (Number(p.price) === 189 ? '-58%' : '-46%'),
+        discountPercent: p.discountPercent || mock?.discountPercent || (Number(p.price) === 189 ? 58 : 46),
+        inStock: p.inStock !== false,
+        isHidden: p.isHidden === true,
+      }
+    })
     set({ products: normalized })
     persistProducts(normalized)
   },
@@ -56,20 +102,31 @@ export const useCartStore = create((set, get) => ({
     let saved = null
     const nextProducts = current.map((p) => {
       if (String(p.id) === String(updatedProduct.id)) {
+        const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(p.id) || m.slug === p.slug)
         const slug =
           updatedProduct.slug ||
+          p.slug ||
           `${(updatedProduct.name || p.name)
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
         const fullName =
           updatedProduct.fullName ||
+          p.fullName ||
           `${updatedProduct.name || p.name} Outframed Keychain`
 
+        const fallbackReviews = p.reviews || mock?.reviews || buildProductReviews(p)
+        const fallbackGallery = Array.isArray(updatedProduct.gallery) && updatedProduct.gallery.length > 0
+          ? updatedProduct.gallery
+          : (p.gallery || mock?.gallery || (updatedProduct.image ? [updatedProduct.image] : [p.image]))
+
         saved = {
+          ...mock,
           ...p,
           ...updatedProduct,
           slug,
           fullName,
+          gallery: fallbackGallery,
+          reviews: Array.isArray(updatedProduct.reviews) && updatedProduct.reviews.length > 0 ? updatedProduct.reviews : fallbackReviews,
           inStock: updatedProduct.inStock !== undefined ? updatedProduct.inStock : p.inStock !== false,
           isHidden: updatedProduct.isHidden !== undefined ? updatedProduct.isHidden : p.isHidden === true,
         }
@@ -156,7 +213,13 @@ export const useCartStore = create((set, get) => ({
         'Durable.',
         'Dimensions: 64mm * 43mm',
       ],
-      reviews: [],
+      reviews: buildProductReviews({
+        id: generatedId,
+        name: cleanName,
+        genre: newProduct.genre || 'MARVEL',
+        reviewCount: 7,
+        badCount: 1,
+      }),
     }
 
     const nextProducts = [productWithDefaults, ...existing]

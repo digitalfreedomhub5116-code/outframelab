@@ -1,5 +1,6 @@
 import { Star, X, CheckCircle2, ChevronDown } from 'lucide-react'
 import { useCartStore } from '../store/cartStore'
+import { MOCK_PRODUCTS, buildProductReviews } from '../data/productsData'
 import { useState, useEffect } from 'react'
 
 export default function ReviewsModal() {
@@ -24,8 +25,13 @@ export default function ReviewsModal() {
 
   if (!activeProduct) return null
 
-  const reviews = activeProduct.reviews || []
-  const visibleReviews = showAll ? reviews : reviews.slice(0, 3)
+  const mockFallback = MOCK_PRODUCTS.find(
+    (m) => String(m.id) === String(activeProduct.id) || m.slug === activeProduct.slug
+  )
+  const reviews = Array.isArray(activeProduct.reviews) && activeProduct.reviews.length > 0
+    ? activeProduct.reviews
+    : (mockFallback?.reviews || buildProductReviews(activeProduct))
+  const visibleReviews = showAll ? reviews : (reviews || []).slice(0, 3)
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
@@ -49,9 +55,9 @@ export default function ReviewsModal() {
                   <Star
                     key={i}
                     className={`h-3.5 w-3.5 ${
-                      i < Math.floor(activeProduct.rating)
+                      i < Math.floor(activeProduct.rating || 4.8)
                         ? 'fill-gold text-gold'
-                        : i < activeProduct.rating
+                        : i < (activeProduct.rating || 4.8)
                         ? 'fill-gold/50 text-gold'
                         : 'text-charcoal-light fill-charcoal-light'
                     }`}
@@ -59,10 +65,10 @@ export default function ReviewsModal() {
                 ))}
               </div>
               <span className="text-xs font-bold text-gold">
-                {activeProduct.rating}
+                {activeProduct.rating || 4.8}
               </span>
               <span className="text-xs text-cream-muted/70">
-                ({activeProduct.reviewCount} customer reviews)
+                ({reviews.length || activeProduct.reviewCount || 12} customer reviews)
               </span>
             </div>
           </div>

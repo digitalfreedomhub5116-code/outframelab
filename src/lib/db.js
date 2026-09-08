@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase'
-import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
+import { MOCK_PRODUCTS, GENRES, buildProductReviews } from '../data/productsData'
 
 const LOCAL_STORAGE_ORDERS_KEY = 'outframe_labs_orders'
 const LOCAL_STORAGE_USER_KEY = 'outframe_labs_user'
@@ -40,27 +40,47 @@ export async function getProducts(options = {}) {
       }
       const { data, error } = await query
       if (!error && data && data.length > 0) {
-        const mapped = data.map((row) => ({
-          ...row,
-          id: Number(row.id) || row.id,
-          name: row.name,
-          fullName: row.full_name || `${row.name} Outframed Keychain`,
-          slug: row.slug,
-          genre: row.genre,
-          price: Number(row.price),
-          originalPrice: Number(row.original_price || 459),
-          image: row.image,
-          gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
-          inStock: row.is_active !== false,
-          isHidden: row.is_hidden === true,
-          rating: Number(row.rating) || 4.8,
-          reviewCount: Number(row.review_count) || 12,
-          dimensions: row.dimensions || '64mm * 43mm',
-          material: row.material || 'Biodegradable PLA',
-          finish: row.finish || 'Antique Gold Finish',
-          keyring: 'Strong and Durable Keyring',
-          durability: 'Durable Impact Resistant Structure',
-        }))
+        const mapped = data.map((row) => {
+          const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(row.id) || m.slug === row.slug)
+          const fallbackReviews = mock?.reviews || buildProductReviews(row)
+          const fallbackGallery = Array.isArray(row.gallery) && row.gallery.length > 0
+            ? row.gallery
+            : (mock?.gallery || [row.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+
+          return {
+            ...mock,
+            ...row,
+            id: Number(row.id) || row.id,
+            name: row.name,
+            fullName: row.full_name || `${row.name} Outframed Keychain`,
+            slug: row.slug || mock?.slug,
+            genre: row.genre || mock?.genre,
+            price: Number(row.price),
+            originalPrice: Number(row.original_price || mock?.originalPrice || 459),
+            image: row.image || mock?.image,
+            gallery: fallbackGallery,
+            inStock: row.is_active !== false,
+            isHidden: row.is_hidden === true,
+            rating: Number(row.rating) || mock?.rating || 4.8,
+            reviewCount: Number(row.review_count) || mock?.reviewCount || fallbackReviews.length || 12,
+            reviews: Array.isArray(row.reviews) && row.reviews.length > 0 ? row.reviews : fallbackReviews,
+            description: row.description || mock?.description || `Handcrafted antique gold ${row.name} outframed keychain.`,
+            features: Array.isArray(row.features) && row.features.length > 0 ? row.features : (mock?.features || [
+              'Each keychain is made from bio degradable PLA material.',
+              'Strong and durable keyring',
+              'Antique gold finish',
+              'Durable.',
+              'Dimensions: 64mm * 43mm',
+            ]),
+            dimensions: row.dimensions || mock?.dimensions || '64mm * 43mm',
+            material: row.material || mock?.material || 'Biodegradable PLA',
+            finish: row.finish || mock?.finish || 'Antique Gold Finish',
+            keyring: 'Strong and Durable Keyring',
+            durability: 'Durable Impact Resistant Structure',
+            discountBadge: mock?.discountBadge || (Number(row.price) === 189 ? '-58%' : '-46%'),
+            discountPercent: mock?.discountPercent || (Number(row.price) === 189 ? 58 : 46),
+          }
+        })
         // Update persistent local cache
         setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, mapped)
         return mapped
@@ -132,8 +152,24 @@ export async function getProductBySlugOrId(identifier) {
         : supabase.from('products').select('*, product_reviews(*)').eq('slug', identifier).single()
       const { data, error } = await query
       if (!error && data) {
+        const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(data.id) || m.slug === data.slug)
+        const fallbackReviews = mock?.reviews || buildProductReviews(data)
+        const fallbackGallery = Array.isArray(data.gallery) && data.gallery.length > 0
+          ? data.gallery
+          : (mock?.gallery || [data.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+
         return {
+          ...mock,
           ...data,
+          id: Number(data.id) || data.id,
+          name: data.name,
+          fullName: data.full_name || `${data.name} Outframed Keychain`,
+          gallery: fallbackGallery,
+          reviews: Array.isArray(data.reviews) && data.reviews.length > 0 ? data.reviews : fallbackReviews,
+          description: data.description || mock?.description || `Handcrafted antique gold ${data.name} outframed keychain.`,
+          features: Array.isArray(data.features) && data.features.length > 0 ? data.features : (mock?.features || []),
+          rating: Number(data.rating) || mock?.rating || 4.8,
+          reviewCount: Number(data.review_count) || mock?.reviewCount || fallbackReviews.length || 12,
           inStock: data.is_active !== false,
           isHidden: data.is_hidden === true,
         }

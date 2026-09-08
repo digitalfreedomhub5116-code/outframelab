@@ -16,6 +16,7 @@ import {
   ChevronDown
 } from 'lucide-react'
 import { MOCK_PRODUCTS, useCartStore, GENRES } from '../store/cartStore'
+import { buildProductReviews } from '../data/productsData'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
@@ -30,10 +31,49 @@ export default function ProductPage() {
 
   const allProducts = useCartStore((s) => s.products)
 
-  // Find product by id or slug
-  const product = allProducts.find(
-    (p) => String(p.id) === productIdOrSlug || p.slug === productIdOrSlug
+  // Find product by id or slug from store
+  const storeProduct = (allProducts || []).find(
+    (p) => String(p.id) === String(productIdOrSlug) || p.slug === productIdOrSlug
   )
+
+  // Find fallback from default MOCK_PRODUCTS
+  const mockFallback = MOCK_PRODUCTS.find(
+    (m) => String(m.id) === String(productIdOrSlug) || m.slug === productIdOrSlug ||
+           (storeProduct && (String(m.id) === String(storeProduct.id) || m.slug === storeProduct.slug))
+  )
+
+  const raw = storeProduct || mockFallback
+
+  const product = raw
+    ? {
+        ...mockFallback,
+        ...raw,
+        name: raw.name || mockFallback?.name || 'Outframed Keychain',
+        fullName: raw.fullName || mockFallback?.fullName || `${raw.name || 'Outframed'} Keychain`,
+        genre: raw.genre || mockFallback?.genre || 'MARVEL',
+        price: Number(raw.price) || mockFallback?.price || 249,
+        originalPrice: Number(raw.originalPrice) || mockFallback?.originalPrice || 459,
+        discountBadge: raw.discountBadge || mockFallback?.discountBadge || '-46%',
+        discountPercent: raw.discountPercent || mockFallback?.discountPercent || 46,
+        description: raw.description || mockFallback?.description || `Handcrafted antique gold ${raw.name} outframed keychain.`,
+        features: Array.isArray(raw.features) && raw.features.length > 0 ? raw.features : (mockFallback?.features || []),
+        rating: Number(raw.rating) || mockFallback?.rating || 4.8,
+        reviewCount: Number(raw.reviewCount) || mockFallback?.reviewCount || 12,
+        reviews: Array.isArray(raw.reviews) && raw.reviews.length > 0
+          ? raw.reviews
+          : (mockFallback?.reviews || buildProductReviews(raw)),
+        gallery: Array.isArray(raw.gallery) && raw.gallery.length > 0
+          ? raw.gallery
+          : (mockFallback?.gallery || (raw.image ? [raw.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])),
+        inStock: raw.inStock !== false,
+        isHidden: raw.isHidden === true,
+      }
+    : null
+
+  const reviews = Array.isArray(product?.reviews) ? product.reviews : []
+  const gallery = Array.isArray(product?.gallery) && product.gallery.length > 0
+    ? product.gallery
+    : (product?.image ? [product.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
 
   const isWishlisted = useCartStore((s) => (product ? s.isWishlisted(product.id) : false))
 
@@ -56,13 +96,13 @@ export default function ProductPage() {
   const isSwiping = useRef(false)
 
   const handleNextImage = () => {
-    if (!product?.gallery?.length) return
-    setActiveImageIndex((prev) => (prev + 1) % product.gallery.length)
+    if (!gallery.length) return
+    setActiveImageIndex((prev) => (prev + 1) % gallery.length)
   }
 
   const handlePrevImage = () => {
-    if (!product?.gallery?.length) return
-    setActiveImageIndex((prev) => (prev - 1 + product.gallery.length) % product.gallery.length)
+    if (!gallery.length) return
+    setActiveImageIndex((prev) => (prev - 1 + gallery.length) % gallery.length)
   }
 
   const handleTouchStart = (e) => {
@@ -222,11 +262,11 @@ export default function ProductPage() {
     }
   }
 
-  const relatedProducts = allProducts.filter(
-    (p) => p.genre === product.genre && p.id !== product.id && !p.isHidden
+  const relatedProducts = (allProducts || []).filter(
+    (p) => p.genre && product?.genre && p.genre === product.genre && String(p.id) !== String(product.id) && !p.isHidden
   ).slice(0, 4)
 
-  const genreData = GENRES.find((g) => g.id === product.genre)
+  const genreData = GENRES.find((g) => g.id === product?.genre)
 
   return (
     <div className="min-h-screen bg-obsidian text-cream selection:bg-gold selection:text-obsidian pb-20 sm:pb-0">
@@ -245,7 +285,7 @@ export default function ProductPage() {
               {[
                 { id: 'image', label: 'Image' },
                 { id: 'description', label: 'Description' },
-                { id: 'reviews', label: `Reviews (${product.reviewCount})` },
+                { id: 'reviews', label: `Reviews (${reviews.length || product.reviewCount || 12})` },
               ].map((tab) => {
                 const isActive = activeTab === tab.id
                 return (
@@ -302,7 +342,7 @@ export default function ProductPage() {
           <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-4">
             {/* Vertical Thumbnails */}
             <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 scrollbar-none">
-              {product.gallery.map((imgUrl, index) => {
+              {gallery.map((imgUrl, index) => {
                 const isSelected = activeImageIndex === index
                 return (
                   <button
@@ -340,7 +380,7 @@ export default function ProductPage() {
                 className="flex h-full w-full transition-transform duration-300 ease-out"
                 style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
               >
-                {product.gallery.map((imgUrl, index) => (
+                {gallery.map((imgUrl, index) => (
                   <div key={index} className="min-w-full h-full flex-shrink-0 relative">
                     <img
                       src={imgUrl}
@@ -353,7 +393,7 @@ export default function ProductPage() {
               </div>
 
               {/* Prev / Next Arrows */}
-              {product.gallery.length > 1 && (
+              {gallery.length > 1 && (
                 <>
                   <button
                     type="button"
@@ -435,7 +475,7 @@ export default function ProductPage() {
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
               >
-                {product.gallery.map((_, i) => (
+                {gallery.map((_, i) => (
                   <button
                     key={i}
                     type="button"
@@ -471,9 +511,9 @@ export default function ProductPage() {
                     <Star
                       key={i}
                       className={`h-4 w-4 ${
-                        i < Math.floor(product.rating)
+                        i < Math.floor(product.rating || 4.8)
                           ? 'fill-gold text-gold'
-                          : i < product.rating
+                          : i < (product.rating || 4.8)
                           ? 'fill-gold/50 text-gold'
                           : 'text-charcoal-light fill-charcoal-light'
                       }`}
@@ -481,10 +521,10 @@ export default function ProductPage() {
                   ))}
                 </div>
                 <span className="text-sm font-bold text-gold">
-                  {product.rating}
+                  {product.rating || 4.8}
                 </span>
                 <span className="text-xs text-cream-muted/80 underline decoration-gold/40 group-hover/rate:text-gold transition-colors">
-                  {product.reviewCount} verified customer ratings
+                  {reviews.length || product.reviewCount || 12} verified customer ratings
                 </span>
               </div>
 
@@ -646,7 +686,7 @@ export default function ProductPage() {
             <div className="flex items-center gap-4 p-4 rounded-2xl border border-gold/20 bg-charcoal/80">
               <div className="text-center">
                 <span className="font-heading text-4xl font-extrabold text-gold block">
-                  {product.rating}
+                  {product.rating || 4.8}
                 </span>
                 <span className="text-[11px] text-cream-muted/60">out of 5</span>
               </div>
@@ -656,9 +696,9 @@ export default function ProductPage() {
                     <Star
                       key={i}
                       className={`h-4 w-4 ${
-                        i < Math.floor(product.rating)
+                        i < Math.floor(product.rating || 4.8)
                           ? 'fill-gold text-gold'
-                          : i < product.rating
+                          : i < (product.rating || 4.8)
                           ? 'fill-gold/50 text-gold'
                           : 'text-charcoal-light fill-charcoal-light'
                       }`}
@@ -666,7 +706,7 @@ export default function ProductPage() {
                   ))}
                 </div>
                 <span className="text-xs font-semibold text-cream">
-                  {product.reviewCount} customer ratings
+                  {reviews.length || product.reviewCount || 12} customer ratings
                 </span>
               </div>
             </div>
@@ -674,7 +714,7 @@ export default function ProductPage() {
 
           {/* Reviews Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(showAllReviews ? product.reviews : product.reviews.slice(0, 3)).map((rev) => (
+            {(showAllReviews ? reviews : reviews.slice(0, 3)).map((rev) => (
               <div
                 key={rev.id}
                 className="rounded-2xl border border-charcoal-light/70 bg-charcoal/60 p-5 transition-all hover:border-gold/30 hover:bg-charcoal"
@@ -682,7 +722,7 @@ export default function ProductPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-full bg-gold/15 text-gold border border-gold/30 flex items-center justify-center font-bold text-xs">
-                      {rev.name.charAt(0)}
+                      {(rev.name || 'C').charAt(0)}
                     </div>
                     <div>
                       <span className="text-sm font-bold text-cream block leading-snug">
@@ -705,7 +745,7 @@ export default function ProductPage() {
                     <Star
                       key={i}
                       className={`h-3.5 w-3.5 ${
-                        i < rev.rating
+                        i < (rev.rating || 5)
                           ? 'fill-gold text-gold'
                           : 'text-charcoal-light fill-charcoal-light'
                       }`}
@@ -722,7 +762,7 @@ export default function ProductPage() {
           </div>
 
           {/* View More Button */}
-          {product.reviews && product.reviews.length > 3 && (
+          {reviews.length > 3 && (
             <div className="mt-8 flex justify-center">
               <button
                 onClick={() => setShowAllReviews((prev) => !prev)}

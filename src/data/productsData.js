@@ -105,16 +105,17 @@ const RAW_PRODUCTS = [
   { id: 25, name: 'Sukuna',           genre: 'ANIME',    price: 189, originalPrice: 459, reviewCount: 13, rating: 4.8, badCount: 2 },
 ]
 
-function buildProductReviews(product) {
+export function buildProductReviews(product = {}) {
   const reviews = []
-  const count = product.reviewCount
-  const badTarget = product.badCount
+  const count = Number(product.reviewCount) || 11
+  const badTarget = Number(product.badCount) || 2
+  const numId = Number(product.id) || 1
 
   // Add bad reviews first (1 to 5 as specified)
   for (let i = 0; i < badTarget && i < REVIEWS_POOL.critical.length; i++) {
-    const pick = REVIEWS_POOL.critical[(product.id + i) % REVIEWS_POOL.critical.length]
+    const pick = REVIEWS_POOL.critical[(numId + i) % REVIEWS_POOL.critical.length]
     reviews.push({
-      id: `bad-${product.id}-${i}`,
+      id: `bad-${numId}-${i}`,
       name: pick.name,
       rating: pick.rating,
       date: `${(i + 2)} days ago`,
@@ -124,11 +125,12 @@ function buildProductReviews(product) {
   }
 
   // Genre specific positive reviews if available
-  const genreList = REVIEWS_POOL.genreSpecific[product.genre] || []
+  const genre = product.genre || 'MARVEL'
+  const genreList = REVIEWS_POOL.genreSpecific[genre] || []
   if (genreList.length > 0 && reviews.length < count) {
-    const genreReview = genreList[product.id % genreList.length]
+    const genreReview = genreList[numId % genreList.length]
     reviews.push({
-      id: `genre-${product.id}`,
+      id: `genre-${numId}`,
       name: genreReview.name,
       rating: 5,
       date: "Just now",
@@ -138,11 +140,11 @@ function buildProductReviews(product) {
   }
 
   // Fill remaining with positive general reviews
-  let posIndex = (product.id * 3) % REVIEWS_POOL.positive.length
+  let posIndex = (numId * 3) % REVIEWS_POOL.positive.length
   while (reviews.length < count) {
     const item = REVIEWS_POOL.positive[posIndex % REVIEWS_POOL.positive.length]
     reviews.push({
-      id: `pos-${product.id}-${reviews.length}`,
+      id: `pos-${numId}-${reviews.length}`,
       name: item.name,
       rating: (reviews.length % 4 === 0) ? 4 : 5,
       date: `${(reviews.length + 1) * 2} days ago`,
