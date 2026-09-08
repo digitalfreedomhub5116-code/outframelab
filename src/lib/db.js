@@ -29,13 +29,9 @@ const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 export async function getProducts(options = {}) {
   const { genre, includeHidden = false } = options
 
-  // 1. Check persistent local storage catalog
-  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, null)
-  let catalog = stored && Array.isArray(stored) && stored.length > 0 ? stored : MOCK_PRODUCTS
-
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase.from('products').select('*')
+      let query = supabase.from('products').select('*').order('id', { ascending: true })
       if (!includeHidden) {
         query = query.eq('is_hidden', false)
       }
@@ -44,11 +40,30 @@ export async function getProducts(options = {}) {
       }
       const { data, error } = await query
       if (!error && data && data.length > 0) {
-        return data.map((row) => ({
+        const mapped = data.map((row) => ({
           ...row,
+          id: Number(row.id) || row.id,
+          name: row.name,
+          fullName: row.full_name || `${row.name} Outframed Keychain`,
+          slug: row.slug,
+          genre: row.genre,
+          price: Number(row.price),
+          originalPrice: Number(row.original_price || 459),
+          image: row.image,
+          gallery: Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : [row.image],
           inStock: row.is_active !== false,
           isHidden: row.is_hidden === true,
+          rating: Number(row.rating) || 4.8,
+          reviewCount: Number(row.review_count) || 12,
+          dimensions: row.dimensions || '64mm * 43mm',
+          material: row.material || 'Biodegradable PLA',
+          finish: row.finish || 'Antique Gold Finish',
+          keyring: 'Strong and Durable Keyring',
+          durability: 'Durable Impact Resistant Structure',
         }))
+        // Update persistent local cache
+        setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, mapped)
+        return mapped
       }
     } catch (err) {
       console.warn('Supabase products fetch failed, using cached catalog', err)
@@ -56,6 +71,8 @@ export async function getProducts(options = {}) {
   }
 
   // Fallback to active catalog
+  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, null)
+  let catalog = stored && Array.isArray(stored) && stored.length > 0 ? stored : MOCK_PRODUCTS
   let result = catalog
   if (!includeHidden) {
     result = result.filter((p) => !p.isHidden)
@@ -64,6 +81,43 @@ export async function getProducts(options = {}) {
     result = result.filter((p) => p.genre === genre)
   }
   return result
+}
+
+export function initProductSync(onProductsUpdated) {
+  // Initial fetch from Supabase
+  getProducts({ includeHidden: true })
+    .then((prods) => {
+      if (prods && prods.length > 0 && onProductsUpdated) {
+        onProductsUpdated(prods)
+      }
+    })
+    .catch((e) => console.warn('Failed initial products fetch:', e))
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const channel = supabase
+        .channel('realtime:store_products')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'products' },
+          async () => {
+            const latest = await getProducts({ includeHidden: true })
+            if (latest && latest.length > 0 && onProductsUpdated) {
+              onProductsUpdated(latest)
+            }
+          }
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    } catch (e) {
+      console.warn('Product realtime listener failed:', e)
+    }
+  }
+
+  return () => {}
 }
 
 export async function getProductBySlugOrId(identifier) {
@@ -98,7 +152,7 @@ export async function getProductBySlugOrId(identifier) {
 
 export async function saveProduct(product) {
   const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, MOCK_PRODUCTS)
-  const idx = stored.findIndex((p) => p.id === product.id)
+  const idx = stored.findIndex((p) => String(p.id) === String(product.id))
   let updated
   if (idx >= 0) {
     updated = [...stored]
@@ -110,18 +164,48 @@ export async function saveProduct(product) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('products').upsert({
+      const cleanName = product.name || 'Outframed Keychain'
+      const slug = product.slug || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
+      const fullName = product.fullName || `${cleanName} Outframed Keychain`
+      const isHidden = product.isHidden === true
+      const isActive = product.inStock !== false
+
+      const payload = {
         id: product.id,
-        name: product.name,
-        slug: product.slug,
-        genre: product.genre,
-        price: product.price,
-        original_price: product.originalPrice,
-        description: product.description,
-        image: product.image,
-        gallery: product.gallery,
-        is_active: product.inStock !== false,
-        is_hidden: product.isHidden === true,
+        name: cleanName,
+        full_name: fullName,
+        slug: slug,
+        genre: product.genre || 'MARVEL',
+        price: Number(product.price) || 249,
+        original_price: Number(product.originalPrice || product.original_price || Math.round(Number(product.price || 249) * 1.8)),
+        description: product.description || `Handcrafted antique gold ${cleanName} keychain.`,
+        image: product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80',
+        gallery: Array.isArray(product.gallery) && product.gallery.length > 0 ? product.gallery : [product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'],
+        is_active: isActive,
+        is_hidden: isHidden,
+        updated_at: new Date().toISOString(),
+      }
+
+      // 1. Main products table
+      const { error: prodErr } = await supabase.from('products').upsert(payload)
+      if (prodErr) {
+        console.warn('Supabase product upsert error:', prodErr.message)
+      }
+
+      // 2. product_visibility table
+      await supabase.from('product_visibility').upsert({
+        product_id: product.id,
+        product_name: cleanName,
+        is_hidden: isHidden,
+        updated_at: new Date().toISOString(),
+      })
+
+      // 3. product_availability table
+      await supabase.from('product_availability').upsert({
+        product_id: product.id,
+        product_name: cleanName,
+        is_available: isActive,
+        stock: isActive ? (product.stock || 50) : 0,
         updated_at: new Date().toISOString(),
       })
     } catch (e) {
@@ -130,6 +214,24 @@ export async function saveProduct(product) {
   }
 
   return product
+}
+
+export async function deleteProductFromDb(productId) {
+  const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, MOCK_PRODUCTS)
+  const updated = stored.filter((p) => String(p.id) !== String(productId))
+  setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, updated)
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await Promise.allSettled([
+        supabase.from('products').delete().eq('id', productId),
+        supabase.from('product_visibility').delete().eq('product_id', productId),
+        supabase.from('product_availability').delete().eq('product_id', productId),
+      ])
+    } catch (e) {
+      console.warn('Supabase delete product error:', e)
+    }
+  }
 }
 
 // ── 2. ORDERS & SHIPROCKET LIVE TRACKING ──

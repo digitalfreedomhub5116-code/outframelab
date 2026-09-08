@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
-import { getLocalCart, saveCartToAccount, saveProduct } from '../lib/db'
+import { getLocalCart, saveCartToAccount, saveProduct, deleteProductFromDb } from '../lib/db'
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
@@ -40,10 +40,22 @@ export const useCartStore = create((set, get) => ({
   // ── Global Products State ──
   products: loadInitialProducts(),
 
+  setProducts: (products) => {
+    if (!Array.isArray(products) || products.length === 0) return
+    const normalized = products.map((p) => ({
+      ...p,
+      inStock: p.inStock !== false,
+      isHidden: p.isHidden === true,
+    }))
+    set({ products: normalized })
+    persistProducts(normalized)
+  },
+
   updateProduct: (updatedProduct) => {
     const current = get().products
+    let saved = null
     const nextProducts = current.map((p) => {
-      if (p.id === updatedProduct.id) {
+      if (String(p.id) === String(updatedProduct.id)) {
         const slug =
           updatedProduct.slug ||
           `${(updatedProduct.name || p.name)
@@ -53,7 +65,7 @@ export const useCartStore = create((set, get) => ({
           updatedProduct.fullName ||
           `${updatedProduct.name || p.name} Outframed Keychain`
 
-        return {
+        saved = {
           ...p,
           ...updatedProduct,
           slug,
@@ -61,16 +73,20 @@ export const useCartStore = create((set, get) => ({
           inStock: updatedProduct.inStock !== undefined ? updatedProduct.inStock : p.inStock !== false,
           isHidden: updatedProduct.isHidden !== undefined ? updatedProduct.isHidden : p.isHidden === true,
         }
+        return saved
       }
       return p
     })
 
     set({ products: nextProducts })
     persistProducts(nextProducts)
+    if (saved) {
+      saveProduct(saved).catch((e) => console.warn('Update product in db failed', e))
+    }
 
     // Also update matching items currently in the cart
     const updatedItems = get().items.map((it) => {
-      if (it.id === updatedProduct.id) {
+      if (String(it.id) === String(updatedProduct.id)) {
         return {
           ...it,
           name: updatedProduct.name || it.name,
@@ -85,7 +101,7 @@ export const useCartStore = create((set, get) => ({
 
     // Also update matching items in wishlist
     const updatedWishlist = get().wishlist.map((it) => {
-      if (it.id === updatedProduct.id) {
+      if (String(it.id) === String(updatedProduct.id)) {
         return {
           ...it,
           name: updatedProduct.name || it.name,
@@ -100,20 +116,34 @@ export const useCartStore = create((set, get) => ({
   },
 
   addProduct: (newProduct) => {
+    const existing = get().products
+    const maxId = Math.max(0, ...existing.map((p) => Number(p.id) || 0))
+    const generatedId = newProduct.id ? Number(newProduct.id) : (maxId > 0 ? maxId + 1 : 26)
+
+    const cleanName = newProduct.name || 'Outframed Keychain'
     const slug =
       newProduct.slug ||
-      `${newProduct.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
-    const fullName = `${newProduct.name} Outframed Keychain`
+      `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
+    const fullName = newProduct.fullName || `${cleanName} Outframed Keychain`
+    const defaultCover =
+      newProduct.image ||
+      'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
     const productWithDefaults = {
-      id: newProduct.id || Date.now(),
+      id: generatedId,
+      name: cleanName,
       slug,
       fullName,
-      originalPrice: newProduct.originalPrice || Math.round(newProduct.price * 1.8),
+      genre: newProduct.genre || 'MARVEL',
+      price: Number(newProduct.price) || 249,
+      originalPrice: Number(newProduct.originalPrice || Math.round(Number(newProduct.price || 249) * 1.8)),
+      description: newProduct.description || `Handcrafted antique gold ${cleanName} keychain.`,
+      image: defaultCover,
+      gallery: newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [defaultCover],
       reviewCount: 7,
       rating: 4.8,
       inStock: newProduct.inStock !== false,
       isHidden: newProduct.isHidden === true,
-      gallery: newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [newProduct.image],
       dimensions: newProduct.dimensions || '64mm * 43mm',
       material: newProduct.material || 'Biodegradable PLA',
       finish: newProduct.finish || 'Antique Gold Finish',
@@ -127,29 +157,35 @@ export const useCartStore = create((set, get) => ({
         'Dimensions: 64mm * 43mm',
       ],
       reviews: [],
-      ...newProduct,
     }
 
-    const nextProducts = [productWithDefaults, ...get().products]
+    const nextProducts = [productWithDefaults, ...existing]
     set({ products: nextProducts })
     persistProducts(nextProducts)
+
+    // Persist globally to Supabase + visibility and availability tables
+    saveProduct(productWithDefaults).catch((err) => console.warn('Sync new product to db failed:', err))
+
     return productWithDefaults
   },
 
   deleteProduct: (productId) => {
-    const nextProducts = get().products.filter((p) => p.id !== productId)
+    const nextProducts = get().products.filter((p) => String(p.id) !== String(productId))
     set({
       products: nextProducts,
-      items: get().items.filter((it) => it.id !== productId),
-      wishlist: get().wishlist.filter((it) => it.id !== productId),
+      items: get().items.filter((it) => String(it.id) !== String(productId)),
+      wishlist: get().wishlist.filter((it) => String(it.id) !== String(productId)),
     })
     persistProducts(nextProducts)
+
+    // Delete from Supabase
+    deleteProductFromDb(productId).catch((err) => console.warn('Sync delete to db failed:', err))
   },
 
   toggleProductStock: (productId) => {
     let updated = null
     const nextProducts = get().products.map((p) => {
-      if (p.id === productId) {
+      if (String(p.id) === String(productId)) {
         updated = { ...p, inStock: !p.inStock }
         return updated
       }
@@ -165,7 +201,7 @@ export const useCartStore = create((set, get) => ({
   toggleProductVisibility: (productId) => {
     let updated = null
     const nextProducts = get().products.map((p) => {
-      if (p.id === productId) {
+      if (String(p.id) === String(productId)) {
         updated = { ...p, isHidden: !p.isHidden }
         return updated
       }

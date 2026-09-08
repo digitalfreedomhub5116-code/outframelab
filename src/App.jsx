@@ -13,9 +13,17 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsPage from './pages/TermsPage'
 import ShippingPolicyPage from './pages/ShippingPolicyPage'
 
-import { initAuthListener, loadAccountCart } from './lib/db'
+import { initAuthListener, loadAccountCart, initProductSync } from './lib/db'
 
 export default function App() {
+  // Global products synchronization with Supabase & Realtime updates across devices
+  useEffect(() => {
+    const unsub = initProductSync((freshProducts) => {
+      useCartStore.getState().setProducts(freshProducts)
+    })
+    return () => unsub && unsub()
+  }, [])
+
   // Sync persistent account cart on auth change & listen to persistent user session
   useEffect(() => {
     const unsub = initAuthListener(async (user) => {

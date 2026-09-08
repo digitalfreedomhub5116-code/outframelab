@@ -43,7 +43,7 @@ import {
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
-import { saveProduct, getAllOrders, updateOrderStatus, deleteOrder } from '../lib/db'
+import { saveProduct, deleteProductFromDb, getAllOrders, updateOrderStatus, deleteOrder } from '../lib/db'
 
 // Helper to resolve clean, authentic product name, high-res image, and quantity for order items
 function resolveOrderItems(rawOrder, catalogProducts = []) {
@@ -1002,14 +1002,20 @@ export default function AdminPanelPage() {
         ? newProduct.gallery
         : [defaultCover]
 
+    const maxId = Math.max(0, ...products.map((p) => Number(p.id) || 0))
+    const nextId = maxId > 0 ? maxId + 1 : 26
+    const cleanName = newProduct.name.trim()
+    const slug = `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
+
     const productToAdd = {
-      id: Date.now(),
-      name: newProduct.name,
-      fullName: `${newProduct.name} Outframed Keychain`,
-      genre: newProduct.genre,
+      id: nextId,
+      name: cleanName,
+      slug,
+      fullName: `${cleanName} Outframed Keychain`,
+      genre: newProduct.genre || 'MARVEL',
       price: Number(newProduct.price),
       originalPrice: Number(newProduct.originalPrice || Math.round(newProduct.price * 1.8)),
-      description: newProduct.description || `Handcrafted antique gold ${newProduct.name} keychain.`,
+      description: newProduct.description || `Handcrafted antique gold ${cleanName} keychain.`,
       image: defaultCover,
       gallery: gallery,
       inStock: newProduct.inStock !== false,
@@ -1037,9 +1043,10 @@ export default function AdminPanelPage() {
   }
 
   // ── DELETE PRODUCT ──
-  const handleDeleteProduct = (prod) => {
+  const handleDeleteProduct = async (prod) => {
     if (window.confirm(`Are you sure you want to permanently delete "${prod.name}" from the store?`)) {
       deleteProduct(prod.id)
+      await deleteProductFromDb(prod.id)
       showToast(`Product "${prod.name}" removed from global store.`)
     }
   }
