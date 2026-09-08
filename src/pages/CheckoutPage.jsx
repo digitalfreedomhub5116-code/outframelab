@@ -39,7 +39,22 @@ export default function CheckoutPage() {
   const closeCart = useCartStore((s) => s.closeCart)
 
   // Stepper: 1: 'address', 2: 'payment', 3: 'confirm'
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStepState] = useState(() => {
+    try {
+      const saved = Number(sessionStorage.getItem('outframe_checkout_step'))
+      return saved >= 1 && saved <= 3 ? saved : 1
+    } catch (e) {
+      return 1
+    }
+  })
+
+  const setCurrentStep = (step) => {
+    setCurrentStepState(step)
+    try {
+      sessionStorage.setItem('outframe_checkout_step', String(step))
+    } catch (e) {}
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   // Auth state
   const [currentUser, setCurrentUser] = useState(() => getCurrentCustomer())
@@ -55,7 +70,22 @@ export default function CheckoutPage() {
 
   // Address state
   const [addresses, setAddresses] = useState([])
-  const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [selectedAddressId, setSelectedAddressIdState] = useState(() => {
+    try {
+      return sessionStorage.getItem('outframe_selected_address_id') || null
+    } catch (e) {
+      return null
+    }
+  })
+
+  const setSelectedAddressId = (id) => {
+    setSelectedAddressIdState(id)
+    try {
+      if (id) sessionStorage.setItem('outframe_selected_address_id', String(id))
+      else sessionStorage.removeItem('outframe_selected_address_id')
+    } catch (e) {}
+  }
+
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false)
   const [editingAddressId, setEditingAddressId] = useState(null)
   const [addressLoading, setAddressLoading] = useState(true)
@@ -75,8 +105,22 @@ export default function CheckoutPage() {
   const [formError, setFormError] = useState('')
   const [formSaving, setFormSaving] = useState(false)
 
-  // Step 2 & 3 state
-  const [paymentMethod, setPaymentMethod] = useState('COD') // 'COD' | 'PREPAID'
+  // Step 2 & 3 state (Persistent payment method)
+  const [paymentMethod, setPaymentMethodState] = useState(() => {
+    try {
+      return sessionStorage.getItem('outframe_payment_method') || 'COD'
+    } catch (e) {
+      return 'COD'
+    }
+  })
+
+  const setPaymentMethod = (method) => {
+    setPaymentMethodState(method)
+    try {
+      sessionStorage.setItem('outframe_payment_method', method)
+    } catch (e) {}
+  }
+
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
   const [orderError, setOrderError] = useState('')
 
@@ -101,11 +145,17 @@ export default function CheckoutPage() {
       setAddresses(addrs || [])
 
       if (addrs && addrs.length > 0) {
-        // Select default address or first address
-        const def = addrs.find((a) => a.is_default) || addrs[0]
-        setSelectedAddressId((prev) => (prev && addrs.some((a) => a.id === prev) ? prev : def.id))
+        // Prioritize previously selected address from session, or default, or first
+        const savedId = sessionStorage.getItem('outframe_selected_address_id')
+        const matched = savedId && addrs.find((a) => String(a.id) === String(savedId))
+        if (matched) {
+          setSelectedAddressIdState(matched.id)
+        } else {
+          const def = addrs.find((a) => a.is_default) || addrs[0]
+          setSelectedAddressIdState((prev) => (prev && addrs.some((a) => String(a.id) === String(prev)) ? prev : def.id))
+        }
       } else {
-        setSelectedAddressId(null)
+        setSelectedAddressIdState(null)
       }
     } catch (e) {
       console.warn('Failed to load user addresses:', e)
@@ -570,11 +620,12 @@ export default function CheckoutPage() {
           <div className="flex h-14 items-center justify-between">
             {/* Back button */}
             <button
+              type="button"
               onClick={() => {
                 if (currentStep > 1) {
-                  setCurrentStep((prev) => prev - 1)
+                  setCurrentStep(currentStep - 1)
                 } else {
-                  navigate(-1)
+                  navigate('/')
                 }
               }}
               className="flex items-center gap-1.5 text-cream-muted hover:text-gold transition-colors cursor-pointer"
@@ -617,23 +668,25 @@ export default function CheckoutPage() {
 
               {/* Step 1: Address */}
               <button
+                type="button"
                 onClick={() => setCurrentStep(1)}
-                className="relative z-10 flex flex-col items-center group cursor-pointer"
+                className="relative z-10 flex flex-col items-center group cursor-pointer px-3 py-1.5 -mx-3 rounded-xl hover:bg-gold/5 transition-all"
+                title="Go to Step 1: Delivery Address"
               >
                 <div
-                  className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                     currentStep === 1
                       ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/20 shadow-md shadow-gold/30'
                       : currentStep > 1
-                      ? 'bg-gold text-obsidian border-2 border-gold shadow-sm'
+                      ? 'bg-gold text-obsidian border-2 border-gold shadow-sm group-hover:scale-110'
                       : 'bg-charcoal border-2 border-charcoal-light text-cream-muted/50'
                   }`}
                 >
-                  {currentStep > 1 ? <Check className="h-3 w-3 stroke-[3]" /> : <div className="h-2 w-2 rounded-full bg-gold" />}
+                  {currentStep > 1 ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : <div className="h-2 w-2 rounded-full bg-gold" />}
                 </div>
                 <span
                   className={`mt-1.5 text-[11px] sm:text-xs font-bold tracking-wide transition-colors ${
-                    currentStep === 1 ? 'text-cream' : currentStep > 1 ? 'text-gold' : 'text-cream-muted/60'
+                    currentStep === 1 ? 'text-cream' : currentStep > 1 ? 'text-gold group-hover:text-yellow-300' : 'text-cream-muted/60'
                   }`}
                 >
                   Address
@@ -642,26 +695,34 @@ export default function CheckoutPage() {
 
               {/* Step 2: Payment */}
               <button
+                type="button"
                 onClick={() => {
-                  if (addresses.length > 0) setCurrentStep(2)
+                  if (currentStep >= 2 || selectedAddressId || addresses.length > 0) {
+                    setCurrentStep(2)
+                  }
                 }}
-                disabled={addresses.length === 0}
-                className="relative z-10 flex flex-col items-center group cursor-pointer disabled:cursor-not-allowed"
+                disabled={!(currentStep >= 2 || selectedAddressId || addresses.length > 0)}
+                className={`relative z-10 flex flex-col items-center group px-3 py-1.5 -mx-3 rounded-xl transition-all ${
+                  (currentStep >= 2 || selectedAddressId || addresses.length > 0)
+                    ? 'cursor-pointer hover:bg-gold/5'
+                    : 'cursor-not-allowed opacity-50'
+                }`}
+                title="Go to Step 2: Payment Method"
               >
                 <div
-                  className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                     currentStep === 2
                       ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/20 shadow-md shadow-gold/30'
                       : currentStep > 2
-                      ? 'bg-gold text-obsidian border-2 border-gold shadow-sm'
+                      ? 'bg-gold text-obsidian border-2 border-gold shadow-sm group-hover:scale-110'
                       : 'bg-charcoal border-2 border-charcoal-light text-cream-muted/50'
                   }`}
                 >
-                  {currentStep > 2 ? <Check className="h-3 w-3 stroke-[3]" /> : <div className={`h-2 w-2 rounded-full ${currentStep === 2 ? 'bg-gold' : 'bg-transparent'}`} />}
+                  {currentStep > 2 ? <Check className="h-3.5 w-3.5 stroke-[3]" /> : <div className={`h-2 w-2 rounded-full ${currentStep === 2 ? 'bg-gold' : 'bg-transparent'}`} />}
                 </div>
                 <span
                   className={`mt-1.5 text-[11px] sm:text-xs font-bold tracking-wide transition-colors ${
-                    currentStep === 2 ? 'text-cream' : currentStep > 2 ? 'text-gold' : 'text-cream-muted/60'
+                    currentStep === 2 ? 'text-cream' : currentStep > 2 ? 'text-gold group-hover:text-yellow-300' : 'text-cream-muted/60'
                   }`}
                 >
                   Payment
@@ -670,14 +731,22 @@ export default function CheckoutPage() {
 
               {/* Step 3: Confirm order */}
               <button
+                type="button"
                 onClick={() => {
-                  if (addresses.length > 0 && selectedAddressId) setCurrentStep(3)
+                  if (currentStep >= 3 || (selectedAddressId && paymentMethod)) {
+                    setCurrentStep(3)
+                  }
                 }}
-                disabled={!selectedAddressId}
-                className="relative z-10 flex flex-col items-center group cursor-pointer disabled:cursor-not-allowed"
+                disabled={!(currentStep >= 3 || (selectedAddressId && paymentMethod))}
+                className={`relative z-10 flex flex-col items-center group px-3 py-1.5 -mx-3 rounded-xl transition-all ${
+                  (currentStep >= 3 || (selectedAddressId && paymentMethod))
+                    ? 'cursor-pointer hover:bg-gold/5'
+                    : 'cursor-not-allowed opacity-50'
+                }`}
+                title="Go to Step 3: Confirm Order"
               >
                 <div
-                  className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                     currentStep === 3
                       ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/20 shadow-md shadow-gold/30'
                       : 'bg-charcoal border-2 border-charcoal-light text-cream-muted/50'
@@ -1348,16 +1417,23 @@ export default function CheckoutPage() {
             <div className="space-y-3">
               {/* Option 1: Cash on Delivery (COD) */}
               <label
-                onClick={() => setPaymentMethod('COD')}
-                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 select-none ${
                   paymentMethod === 'COD'
-                    ? 'border-gold bg-charcoal shadow-lg shadow-gold/10'
+                    ? 'border-gold bg-charcoal shadow-lg shadow-gold/15 ring-1 ring-gold/30'
                     : 'border-charcoal-light/80 bg-charcoal/50 hover:border-gold/30'
                 }`}
               >
+                <input
+                  type="radio"
+                  name="checkout_payment_option"
+                  value="COD"
+                  checked={paymentMethod === 'COD'}
+                  onChange={() => setPaymentMethod('COD')}
+                  className="sr-only"
+                />
                 <div className="shrink-0">
                   <div
-                    className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                    className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
                       paymentMethod === 'COD'
                         ? 'border-gold bg-obsidian ring-2 ring-gold/40'
                         : 'border-cream-muted/40'
@@ -1374,21 +1450,31 @@ export default function CheckoutPage() {
                       Cash on Delivery (COD)
                     </span>
                   </div>
+                  <p className="text-[11px] text-cream-muted/70 mt-0.5">
+                    Pay securely in cash when your keychain arrives at your door.
+                  </p>
                 </div>
               </label>
 
               {/* Option 2: UPI / QR / NetBanking */}
               <label
-                onClick={() => setPaymentMethod('PREPAID')}
-                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                className={`flex items-center gap-3.5 p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all duration-300 select-none ${
                   paymentMethod === 'PREPAID'
-                    ? 'border-gold bg-charcoal shadow-lg shadow-gold/10'
+                    ? 'border-gold bg-charcoal shadow-lg shadow-gold/15 ring-1 ring-gold/30'
                     : 'border-charcoal-light/80 bg-charcoal/50 hover:border-gold/30'
                 }`}
               >
+                <input
+                  type="radio"
+                  name="checkout_payment_option"
+                  value="PREPAID"
+                  checked={paymentMethod === 'PREPAID'}
+                  onChange={() => setPaymentMethod('PREPAID')}
+                  className="sr-only"
+                />
                 <div className="shrink-0">
                   <div
-                    className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${
+                    className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all ${
                       paymentMethod === 'PREPAID'
                         ? 'border-gold bg-obsidian ring-2 ring-gold/40'
                         : 'border-cream-muted/40'
@@ -1405,6 +1491,9 @@ export default function CheckoutPage() {
                       UPI / Instant QR / NetBanking
                     </span>
                   </div>
+                  <p className="text-[11px] text-cream-muted/70 mt-0.5">
+                    Fast & verified online payment via Google Pay, PhonePe, Paytm, UPI.
+                  </p>
                 </div>
               </label>
             </div>
