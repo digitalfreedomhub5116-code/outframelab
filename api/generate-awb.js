@@ -417,11 +417,40 @@ export default async function handler(req, res) {
     const shiprocketOrderId = createOrderResult.order_id
     const shipmentId = createOrderResult.shipment_id
 
-    // 8. Assign Courier & Generate AWB (/v1/external/courier/assign/awb)
+    // 8. Find Lowest-Cost Courier & Assign AWB (/v1/external/courier/assign/awb)
     let awbCode = createOrderResult.awb_code || null
     let courierName = createOrderResult.courier_name || 'Delhivery Surface'
+    let selectedCourierId = null
 
     if (!awbCode) {
+      // Automatically find the cheapest available courier for this route to save shipping cost
+      try {
+        const isCod = paymentMethod === 'COD' ? 1 : 0
+        const serviceRes = await fetch(
+          `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=415106&delivery_postcode=${rawPincode}&weight=0.1&cod=${isCod}`,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${shiprocketToken}`,
+            },
+          }
+        )
+        const serviceData = await serviceRes.json()
+        const availableCouriers = serviceData?.data?.available_courier_companies || []
+        if (availableCouriers.length > 0) {
+          availableCouriers.sort((a, b) => Number(a.rate || 999) - Number(b.rate || 999))
+          selectedCourierId = availableCouriers[0].courier_company_id
+          courierName = availableCouriers[0].courier_name || courierName
+        }
+      } catch (err) {
+        console.warn('Notice: Could not query lowest-cost courier serviceability:', err)
+      }
+
+      const assignPayload = { shipment_id: shipmentId }
+      if (selectedCourierId) {
+        assignPayload.courier_id = selectedCourierId
+      }
+
       const assignAwbResponse = await fetch(
         'https://apiv2.shiprocket.in/v1/external/courier/assign/awb',
         {
@@ -430,9 +459,7 @@ export default async function handler(req, res) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${shiprocketToken}`,
           },
-          body: JSON.stringify({
-            shipment_id: shipmentId,
-          }),
+          body: JSON.stringify(assignPayload),
         }
       )
 
