@@ -491,6 +491,7 @@ export default async function handler(req, res) {
       courierPartner: courierName,
       awbCode,
       trackingUrl,
+      labelUrl,
     })
 
     // 11. Return Success to Frontend
@@ -524,6 +525,7 @@ async function updateDatabaseWithAwb({
   courierPartner,
   awbCode,
   trackingUrl,
+  labelUrl,
 }) {
   if (!supabase || !order.id) return
 
@@ -531,22 +533,24 @@ async function updateDatabaseWithAwb({
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(order.id))
     const nowIso = new Date().toISOString()
 
+    const orderUpdatePayload = {
+      status: 'Shipped',
+      updated_at: nowIso,
+    }
+    if (labelUrl) {
+      orderUpdatePayload.notes = JSON.stringify({ label_url: labelUrl, awb: awbCode, courier: courierPartner })
+    }
+
     // Update orders status
     if (isUUID) {
       await supabase
         .from('orders')
-        .update({
-          status: 'Shipped',
-          updated_at: nowIso,
-        })
+        .update(orderUpdatePayload)
         .eq('id', order.id)
     } else {
       await supabase
         .from('orders')
-        .update({
-          status: 'Shipped',
-          updated_at: nowIso,
-        })
+        .update(orderUpdatePayload)
         .eq('order_number', order.order_number || order.id)
     }
 

@@ -587,6 +587,11 @@ export default function AdminPanelPage() {
 
             const shipmentObj = Array.isArray(o.shipments) && o.shipments[0] ? o.shipments[0] : o.shipment
 
+            let parsedNotes = {}
+            try {
+              if (o.notes) parsedNotes = typeof o.notes === 'string' ? JSON.parse(o.notes) : o.notes
+            } catch (e) {}
+
             return {
               id: o.order_number || o.id,
               customer_name: o.customer_name || 'Collector',
@@ -604,7 +609,7 @@ export default function AdminPanelPage() {
               awb_code: shipmentObj?.awb_code || o.awb_code || null,
               courier_partner: shipmentObj?.courier_partner || o.courier_partner || null,
               tracking_url: shipmentObj?.tracking_url || (shipmentObj?.awb_code ? `https://shiprocket.co/tracking/${shipmentObj.awb_code}` : null),
-              label_url: shipmentObj?.label_url || o.label_url || null,
+              label_url: parsedNotes.label_url || shipmentObj?.label_url || o.label_url || null,
               shiprocket_shipment_id: shipmentObj?.shiprocket_shipment_id || null,
               created_at: o.created_at || new Date().toISOString(),
             }
