@@ -120,10 +120,19 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    const parsedUrl = new URL(req.url, 'https://outframelabs.in')
-    const action = parsedUrl.searchParams.get('action')
-    const orderParam = parsedUrl.searchParams.get('orderId') || parsedUrl.searchParams.get('order_id')
-    const shipmentParam = parsedUrl.searchParams.get('shipmentId') || parsedUrl.searchParams.get('shipment_id')
+    const query = req.query || {}
+    let action = query.action
+    let orderParam = query.orderId || query.order_id
+    let shipmentParam = query.shipmentId || query.shipment_id
+
+    if (!action && req.url && req.url.includes('?')) {
+      try {
+        const parsedUrl = new URL(req.url, 'https://outframelabs.in')
+        action = action || parsedUrl.searchParams.get('action')
+        orderParam = orderParam || parsedUrl.searchParams.get('orderId') || parsedUrl.searchParams.get('order_id')
+        shipmentParam = shipmentParam || parsedUrl.searchParams.get('shipmentId') || parsedUrl.searchParams.get('shipment_id')
+      } catch (e) {}
+    }
 
     // Dynamic Live Shipping Label PDF generation & redirect
     if (action === 'label' && (orderParam || shipmentParam)) {
