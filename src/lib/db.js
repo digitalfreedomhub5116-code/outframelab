@@ -366,6 +366,29 @@ export async function getAllOrders() {
   return getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
 }
 
+export async function updateOrderStatus(orderId, orderNumber, newStatus) {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const nowIso = new Date().toISOString()
+      const isUUID = orderId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+      const cleanNum = String(orderNumber || orderId || '').replace(/^#\s*/, '').trim()
+
+      let q = supabase.from('orders').update({
+        status: newStatus,
+        updated_at: nowIso,
+      })
+
+      if (isUUID) {
+        await q.eq('id', orderId)
+      } else if (cleanNum) {
+        await q.or(`order_number.eq.${cleanNum},order_number.eq.#${cleanNum}`)
+      }
+    } catch (e) {
+      console.warn('Supabase updateOrderStatus error', e)
+    }
+  }
+}
+
 // ── 3. SIMULATE / ADVANCE ORDER STATUS (For Live Testing & Demos) ──
 export function advanceOrderStatus(orderNumber) {
   const orders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])

@@ -41,7 +41,7 @@ import {
 } from 'lucide-react'
 import { GENRES } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
-import { saveProduct, getAllOrders } from '../lib/db'
+import { saveProduct, getAllOrders, updateOrderStatus } from '../lib/db'
 
 
 
@@ -492,6 +492,8 @@ export default function AdminPanelPage() {
 
             return {
               id: o.order_number || o.id,
+              db_id: o.id,
+              order_number: o.order_number || o.id,
               customer_name: o.customer_name || 'Collector',
               customer_phone: o.customer_phone || '+91 98765 00000',
               customer_email: o.customer_email || 'orders@outframelabs.in',
@@ -535,14 +537,17 @@ export default function AdminPanelPage() {
 
   // Cancel Order on Shiprocket & Supabase
   const handleCancelShiprocketOrder = async (orderId) => {
-    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId)
+    const targetOrder = orders.find(
+      (o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId
+    )
     if (!targetOrder) {
       showToast('Order record not found.', 'error')
       return
     }
 
+    const orderDisplay = targetOrder.order_number || targetOrder.id || orderId
     const confirmed = window.confirm(
-      `Cancel Order #${orderId} on Shiprocket?\n\nThis will void the shipment in Shiprocket logistics and immediately reflect as "Cancelled by Seller" on the customer's live tracking.`
+      `Cancel Order #${orderDisplay}?\n\nThis will void the shipment in Shiprocket logistics and immediately reflect as "Cancelled by Seller" on the customer's live tracking.`
     )
     if (!confirmed) return
 
@@ -554,7 +559,8 @@ export default function AdminPanelPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'cancel',
-          orderId: targetOrder.id || orderId,
+          orderId: targetOrder.db_id || targetOrder.id || orderId,
+          orderNumber: targetOrder.order_number || targetOrder.id || orderId,
           orderData: targetOrder,
           reason: 'Cancelled by seller in Outframe Labs Admin Portal',
         }),
@@ -563,13 +569,13 @@ export default function AdminPanelPage() {
       const data = await res.json()
 
       if (!res.ok || !data.success) {
-        showToast(data.error || 'Failed to cancel on Shiprocket', 'error')
+        showToast(data.error || 'Failed to cancel order on Shiprocket', 'error')
         return
       }
 
       setOrders((prev) =>
         prev.map((o) => {
-          if (o.id === orderId || o.order_number === orderId) {
+          if (o.id === orderId || o.order_number === orderId || o.db_id === orderId) {
             return {
               ...o,
               status: 'CANCELLED',
@@ -581,7 +587,7 @@ export default function AdminPanelPage() {
         })
       )
 
-      showToast(`Order #${orderId} cancelled on Shiprocket. Live tracking updated!`, 'success')
+      showToast(`Order #${orderDisplay} cancelled. Live tracking updated!`, 'success')
     } catch (err) {
       showToast('Error: ' + err.message, 'error')
     } finally {
@@ -653,25 +659,41 @@ export default function AdminPanelPage() {
   }
 
   // Update order status
-  const handleStatusChange = (orderId, newStatus) => {
+  const handleStatusChange = async (orderId, newStatus) => {
     if (newStatus === 'CANCELLED') {
       handleCancelShiprocketOrder(orderId)
       return
     }
     setOrders((prev) =>
       prev.map((o) => {
-        if (o.id === orderId) {
+        if (o.id === orderId || o.order_number === orderId || o.db_id === orderId) {
           return { ...o, status: newStatus }
         }
         return o
       })
     )
     showToast(`Order #${orderId} status set to "${newStatus}"`, 'success')
+
+    // Persist status change to Supabase database
+    try {
+      const targetOrder = orders.find(
+        (o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId
+      )
+      let dbStatus = newStatus
+      if (newStatus === 'Payment Received') dbStatus = 'CONFIRMED'
+      else if (newStatus === 'Printing on Kobra 2 Neo') dbStatus = 'PRINTING'
+      else if (newStatus === 'Packed') dbStatus = 'PACKED'
+      else if (newStatus === 'Shipped') dbStatus = 'SHIPPED'
+
+      await updateOrderStatus(targetOrder?.db_id, targetOrder?.order_number || orderId, dbStatus)
+    } catch (e) {
+      console.warn('Could not persist status change to Supabase:', e)
+    }
   }
 
   // Generate AWB for dispatch via Shiprocket API
   const handleGenerateAwb = async (orderId) => {
-    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId)
+    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId)
     if (!targetOrder) {
       showToast('Order not found in database records.', 'error')
       return
@@ -684,7 +706,7 @@ export default function AdminPanelPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orderId: targetOrder.id || orderId,
+          orderId: targetOrder.db_id || targetOrder.id || orderId,
           orderData: targetOrder,
         }),
       })
@@ -700,7 +722,7 @@ export default function AdminPanelPage() {
       // Update local state with real AWB, courier partner, tracking URL, and label URL
       setOrders((prev) =>
         prev.map((o) => {
-          if (o.id === orderId || o.order_number === orderId) {
+          if (o.id === orderId || o.order_number === orderId || o.db_id === orderId) {
             return {
               ...o,
               awb_code: data.awb_code,

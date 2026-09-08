@@ -86,6 +86,26 @@ async function getShiprocketAuthToken() {
 }
 
 /**
+ * Shared Supabase Client Helper
+ */
+function getSupabaseClient() {
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://sooedjbqgrdjtwiobjpr.supabase.co'
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvb2VkamJxZ3JkanR3aW9ianByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDU1NzksImV4cCI6MjEwNDMyMTU3OX0.dgKiyPzjtiTTFFVH8QhpWHI3QTXAOelwiBBBngboGiI'
+
+  if (supabaseUrl && supabaseKey) {
+    return createClient(supabaseUrl, supabaseKey)
+  }
+  return null
+}
+
+/**
  * Universal Serverless API Route for Shiprocket AWB Generation
  * Compatible with Vercel Serverless Functions, Next.js API Routes, Express, and Vite dev middleware
  */
@@ -104,20 +124,7 @@ export default async function handler(req, res) {
   }
 
   // 1. Initialize Supabase Client early for label lookup & orders
-  const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    'https://sooedjbqgrdjtwiobjpr.supabase.co'
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvb2VkamJxZ3JkanR3aW9ianByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDU1NzksImV4cCI6MjEwNDMyMTU3OX0.dgKiyPzjtiTTFFVH8QhpWHI3QTXAOelwiBBBngboGiI'
-
-  let supabase = null
-  if (supabaseUrl && supabaseKey) {
-    supabase = createClient(supabaseUrl, supabaseKey)
-  }
+  const supabase = getSupabaseClient()
 
   if (req.method === 'GET') {
     const query = req.query || {}
@@ -224,10 +231,12 @@ export default async function handler(req, res) {
     const fallbackOrderData = body.orderData || null
 
     // Cancel order action via POST
-    if (action === 'cancel' && (orderId || fallbackOrderData?.id)) {
+    if (action === 'cancel' && (orderId || fallbackOrderData?.id || fallbackOrderData?.order_number)) {
       const result = await handleCancelOrder({
         supabase,
         orderId: orderId || fallbackOrderData?.id,
+        orderNumber: body.orderNumber || fallbackOrderData?.order_number,
+        orderData: fallbackOrderData,
         reason: body.reason || 'Cancelled by seller on Shiprocket',
       })
       return sendJson(res, result.success ? 200 : 400, result)
@@ -247,22 +256,6 @@ export default async function handler(req, res) {
         success: false,
         error: 'Missing required parameter: orderId is required to generate an AWB.',
       })
-    }
-
-    // 1. Initialize Supabase Client
-    const supabaseUrl =
-      process.env.SUPABASE_URL ||
-      process.env.VITE_SUPABASE_URL ||
-      'https://sooedjbqgrdjtwiobjpr.supabase.co'
-    const supabaseKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvb2VkamJxZ3JkanR3aW9ianByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDU1NzksImV4cCI6MjEwNDMyMTU3OX0.dgKiyPzjtiTTFFVH8QhpWHI3QTXAOelwiBBBngboGiI'
-
-    let supabase = null
-    if (supabaseUrl && supabaseKey) {
-      supabase = createClient(supabaseUrl, supabaseKey)
     }
 
     // 2. Fetch Order Details from Database
@@ -601,7 +594,10 @@ async function updateDatabaseWithAwb({
   trackingUrl,
   labelUrl,
 }) {
-  if (!supabase || !order.id) return
+  if (!supabase) {
+    supabase = getSupabaseClient()
+  }
+  if (!supabase || !order?.id) return
 
   try {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(order.id))
@@ -687,8 +683,21 @@ async function updateDatabaseWithAwb({
 /**
  * Handle cancelling an order on Shiprocket and updating Supabase database
  */
-async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by seller on Shiprocket' }) {
-  if (!orderId) {
+async function handleCancelOrder({
+  supabase,
+  orderId,
+  orderNumber = null,
+  orderData = null,
+  reason = 'Cancelled by seller on Shiprocket',
+}) {
+  if (!supabase) {
+    supabase = getSupabaseClient()
+  }
+
+  const rawId = String(orderId || orderNumber || orderData?.order_number || orderData?.id || '').trim()
+  const cleanId = rawId.replace(/^#\s*/, '').trim()
+
+  if (!cleanId && !orderData?.id && !orderData?.order_number) {
     return { success: false, error: 'Order ID is required to cancel order.' }
   }
 
@@ -696,18 +705,23 @@ async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by sel
   let order = null
   let shipment = null
 
-  if (supabase) {
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+  if (supabase && cleanId) {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
     let q = supabase.from('orders').select('*, shipments(*)')
     if (isUUID) {
-      q = q.or(`id.eq.${orderId},order_number.eq.${orderId}`)
+      q = q.or(`id.eq.${cleanId},order_number.eq.${cleanId}`)
     } else {
-      q = q.eq('order_number', String(orderId).trim())
+      q = q.or(`order_number.eq.${cleanId},order_number.eq.#${cleanId},id.eq.${cleanId}`)
     }
     const { data } = await q.maybeSingle()
     order = data
-    shipment = Array.isArray(order?.shipments) ? order.shipments[0] : order?.shipments
   }
+
+  if (!order && orderData) {
+    order = orderData
+  }
+
+  shipment = Array.isArray(order?.shipments) ? order.shipments[0] : (order?.shipments || order?.shipment)
 
   // Attempt to cancel on Shiprocket API if credentials exist
   let shiprocketCancelled = false
@@ -750,10 +764,10 @@ async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by sel
   }
 
   // Update Supabase records
-  if (supabase && order?.id) {
+  if (supabase && (order?.id || cleanId)) {
     let parsedNotes = {}
     try {
-      if (order.notes) {
+      if (order?.notes) {
         parsedNotes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes
       }
     } catch (e) {}
@@ -763,40 +777,43 @@ async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by sel
     parsedNotes.cancellation_reason = reason
     if (shiprocketMsg) parsedNotes.shiprocket_cancel_response = shiprocketMsg
 
+    const updatePayload = {
+      status: 'CANCELLED',
+      notes: JSON.stringify(parsedNotes),
+      updated_at: nowIso,
+    }
+
     // Update orders table
-    await supabase
-      .from('orders')
-      .update({
-        status: 'CANCELLED',
-        notes: JSON.stringify(parsedNotes),
-        updated_at: nowIso,
-      })
-      .eq('id', order.id)
+    if (order?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.id)) {
+      await supabase.from('orders').update(updatePayload).eq('id', order.id)
+    } else {
+      await supabase.from('orders').update(updatePayload).eq('order_number', order?.order_number || cleanId)
+    }
 
     // Update shipments table
-    await supabase
-      .from('shipments')
-      .update({
-        status: 'CANCELLED',
-        updated_at: nowIso,
-      })
-      .eq('order_id', order.id)
+    if (order?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(order.id)) {
+      await supabase.from('shipments').update({ status: 'CANCELLED', updated_at: nowIso }).eq('order_id', order.id)
+    } else if (shipment?.id) {
+      await supabase.from('shipments').update({ status: 'CANCELLED', updated_at: nowIso }).eq('id', shipment.id)
+    }
 
     // Insert tracking event
-    await supabase.from('tracking_events').insert({
-      order_id: order.id,
-      shipment_id: shipment?.id || null,
-      status: 'CANCELLED',
-      activity: `Order cancelled on Shiprocket by seller. Reason: ${reason}. Live tracking halted.`,
-      location: 'Merchant Fulfillment Hub (Satara)',
-      event_time: nowIso,
-    })
+    if (order?.id) {
+      await supabase.from('tracking_events').insert({
+        order_id: order.id,
+        shipment_id: shipment?.id || null,
+        status: 'CANCELLED',
+        activity: `Order cancelled by seller. Reason: ${reason}. Live tracking halted.`,
+        location: 'Merchant Fulfillment Hub (Satara)',
+        event_time: nowIso,
+      })
+    }
 
     return {
       success: true,
-      message: `Order #${order.order_number || order.id} has been cancelled on Shiprocket. Live tracking updated.`,
-      order_id: order.id,
-      order_number: order.order_number,
+      message: `Order #${order?.order_number || cleanId} has been cancelled on Shiprocket. Live tracking updated.`,
+      order_id: order?.id || cleanId,
+      order_number: order?.order_number || cleanId,
       shiprocket_cancelled: shiprocketCancelled,
       shiprocket_response: shiprocketMsg,
     }
@@ -815,6 +832,9 @@ async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by sel
  */
 async function handleSyncOrders({ supabase, orderId }) {
   if (!supabase) {
+    supabase = getSupabaseClient()
+  }
+  if (!supabase) {
     return { success: false, error: 'Database not initialized.' }
   }
 
@@ -822,12 +842,14 @@ async function handleSyncOrders({ supabase, orderId }) {
   let ordersToCheck = []
 
   if (orderId) {
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+    const rawId = String(orderId).trim()
+    const cleanId = rawId.replace(/^#\s*/, '').trim()
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId)
     let q = supabase.from('orders').select('*, shipments(*)')
     if (isUUID) {
-      q = q.or(`id.eq.${orderId},order_number.eq.${orderId}`)
+      q = q.or(`id.eq.${cleanId},order_number.eq.${cleanId}`)
     } else {
-      q = q.eq('order_number', String(orderId).trim())
+      q = q.or(`order_number.eq.${cleanId},order_number.eq.#${cleanId},id.eq.${cleanId}`)
     }
     const { data } = await q.maybeSingle()
     if (data) ordersToCheck = [data]
