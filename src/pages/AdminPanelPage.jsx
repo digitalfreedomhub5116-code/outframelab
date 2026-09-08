@@ -35,7 +35,9 @@ import {
   Trash2,
   Image as ImageIcon,
   RotateCcw,
-  Globe
+  Globe,
+  Ban,
+  XCircle
 } from 'lucide-react'
 import { GENRES } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -550,10 +552,14 @@ export default function AdminPanelPage() {
     pickupPincode: '411038',
     aggregator: 'Shiprocket / Delhivery Express',
     autoGenerateAwb: true,
+    autoSyncCancellations: true,
   })
 
   // Live Shiprocket API connection status
   const [shiprocketConnected, setShiprocketConnected] = useState(null)
+  const [isSyncingStatuses, setIsSyncingStatuses] = useState(false)
+  const [cancellingOrder, setCancellingOrder] = useState({})
+
   useEffect(() => {
     fetch('/api/generate-awb')
       .then((res) => res.json())
@@ -584,6 +590,7 @@ export default function AdminPanelPage() {
             else if (st === 'PRINTING') st = 'Printing on Kobra 2 Neo'
             else if (st === 'PACKED') st = 'Packed'
             else if (st === 'SHIPPED' || st === 'IN_TRANSIT' || st === 'DELIVERED') st = 'Shipped'
+            else if (st === 'CANCELLED' || st === 'CANCELED' || String(st).toUpperCase().includes('CANCEL')) st = 'CANCELLED'
 
             const shipmentObj = Array.isArray(o.shipments) && o.shipments[0] ? o.shipments[0] : o.shipment
 
@@ -611,6 +618,8 @@ export default function AdminPanelPage() {
               tracking_url: shipmentObj?.tracking_url || (shipmentObj?.awb_code ? `https://shiprocket.co/tracking/${shipmentObj.awb_code}` : null),
               label_url: parsedNotes.label_url || shipmentObj?.label_url || o.label_url || null,
               shiprocket_shipment_id: shipmentObj?.shiprocket_shipment_id || null,
+              cancellation_reason: parsedNotes.cancellation_reason || null,
+              cancelled_at: parsedNotes.cancelled_at || null,
               created_at: o.created_at || new Date().toISOString(),
             }
           })
@@ -633,8 +642,131 @@ export default function AdminPanelPage() {
     }, 5000)
   }
 
+  // Cancel Order on Shiprocket & Supabase
+  const handleCancelShiprocketOrder = async (orderId) => {
+    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId)
+    if (!targetOrder) {
+      showToast('Order record not found.', 'error')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Cancel Order #${orderId} on Shiprocket?\n\nThis will void the shipment in Shiprocket logistics and immediately reflect as "Cancelled by Seller" on the customer's live tracking.`
+    )
+    if (!confirmed) return
+
+    setCancellingOrder((prev) => ({ ...prev, [orderId]: true }))
+
+    try {
+      const res = await fetch('/api/generate-awb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel',
+          orderId: targetOrder.id || orderId,
+          orderData: targetOrder,
+          reason: 'Cancelled by seller in Outframe Labs Admin Portal',
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Failed to cancel on Shiprocket', 'error')
+        return
+      }
+
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId || o.order_number === orderId) {
+            return {
+              ...o,
+              status: 'CANCELLED',
+              cancellation_reason: 'Cancelled by seller in Outframe Labs Admin Portal',
+              cancelled_at: new Date().toISOString(),
+            }
+          }
+          return o
+        })
+      )
+
+      showToast(`Order #${orderId} cancelled on Shiprocket. Live tracking updated!`, 'success')
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error')
+    } finally {
+      setCancellingOrder((prev) => ({ ...prev, [orderId]: false }))
+    }
+  }
+
+  // Poll Shiprocket API to sync cancellation statuses & courier tracking
+  const handleSyncShiprocketStatuses = async () => {
+    setIsSyncingStatuses(true)
+    try {
+      const res = await fetch('/api/generate-awb?action=sync')
+      const data = await res.json()
+
+      // Refresh orders from Supabase
+      const freshData = await getAllOrders()
+      if (freshData && freshData.length > 0) {
+        const mapped = freshData.map((o) => {
+          let st = o.status
+          if (st === 'PLACED' || st === 'CONFIRMED') st = 'Payment Received'
+          else if (st === 'PRINTING') st = 'Printing on Kobra 2 Neo'
+          else if (st === 'PACKED') st = 'Packed'
+          else if (st === 'SHIPPED' || st === 'IN_TRANSIT' || st === 'DELIVERED') st = 'Shipped'
+          else if (st === 'CANCELLED' || st === 'CANCELED' || String(st).toUpperCase().includes('CANCEL')) st = 'CANCELLED'
+
+          const shipmentObj = Array.isArray(o.shipments) && o.shipments[0] ? o.shipments[0] : o.shipment
+          let parsedNotes = {}
+          try {
+            if (o.notes) parsedNotes = typeof o.notes === 'string' ? JSON.parse(o.notes) : o.notes
+          } catch (e) {}
+
+          return {
+            id: o.order_number || o.id,
+            customer_name: o.customer_name || 'Collector',
+            customer_phone: o.customer_phone || '+91 98765 00000',
+            customer_email: o.customer_email || 'orders@outframelabs.in',
+            shipping_address: o.shipping_address || {
+              address: 'Fulfillment Order',
+              city: 'Mumbai',
+              state: 'Maharashtra',
+              pincode: '400001',
+            },
+            items: o.order_items || o.items || [{ name: 'Outframed Antique Gold Keychain', quantity: 1, price: o.total_amount || 249 }],
+            total_amount: o.total_amount || 249,
+            status: st || 'Payment Received',
+            awb_code: shipmentObj?.awb_code || o.awb_code || null,
+            courier_partner: shipmentObj?.courier_partner || o.courier_partner || null,
+            tracking_url: shipmentObj?.tracking_url || (shipmentObj?.awb_code ? `https://shiprocket.co/tracking/${shipmentObj.awb_code}` : null),
+            label_url: parsedNotes.label_url || shipmentObj?.label_url || o.label_url || null,
+            shiprocket_shipment_id: shipmentObj?.shiprocket_shipment_id || null,
+            cancellation_reason: parsedNotes.cancellation_reason || null,
+            cancelled_at: parsedNotes.cancelled_at || null,
+            created_at: o.created_at || new Date().toISOString(),
+          }
+        })
+        setOrders(mapped)
+      }
+
+      if (data?.updated_cancellations?.length > 0) {
+        showToast(`Shiprocket sync: ${data.updated_cancellations.length} order(s) updated to CANCELLED.`, 'success')
+      } else {
+        showToast('Shiprocket sync complete: All live tracking statuses are up to date.', 'success')
+      }
+    } catch (err) {
+      showToast('Notice: Could not sync Shiprocket statuses (' + err.message + ')', 'error')
+    } finally {
+      setIsSyncingStatuses(false)
+    }
+  }
+
   // Update order status
   const handleStatusChange = (orderId, newStatus) => {
+    if (newStatus === 'CANCELLED') {
+      handleCancelShiprocketOrder(orderId)
+      return
+    }
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId) {
@@ -850,6 +982,11 @@ export default function AdminPanelPage() {
         return 'bg-purple-500/10 text-purple-300 border-purple-500/30'
       case 'Shipped':
         return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+      case 'CANCELLED':
+      case 'CANCELED':
+      case 'Cancelled':
+      case 'Cancelled by Seller':
+        return 'bg-red-500/15 text-red-400 border-red-500/40'
       default:
         return 'bg-charcoal-light text-cream-muted border-charcoal-light'
     }
@@ -1372,26 +1509,39 @@ export default function AdminPanelPage() {
                   )}
                 </div>
 
-                {/* Status Filter Tabs */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-                  {['ALL', 'Payment Received', 'Printing on Kobra 2 Neo', 'Packed', 'Shipped'].map(
-                    (st) => {
-                      const isActive = statusFilter === st
-                      return (
-                        <button
-                          key={st}
-                          onClick={() => setStatusFilter(st)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
-                            isActive
-                              ? 'bg-gold text-obsidian font-bold shadow-md'
-                              : 'bg-charcoal border border-charcoal-light text-cream-muted hover:text-cream hover:border-gold/30'
-                          }`}
-                        >
-                          {st === 'ALL' ? 'All Orders' : st}
-                        </button>
-                      )
-                    }
-                  )}
+                {/* Status Filter Tabs & Shiprocket Sync Button */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+                  <div className="flex items-center gap-1.5">
+                    {['ALL', 'Payment Received', 'Printing on Kobra 2 Neo', 'Packed', 'Shipped', 'CANCELLED'].map(
+                      (st) => {
+                        const isActive = statusFilter === st
+                        return (
+                          <button
+                            key={st}
+                            onClick={() => setStatusFilter(st)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-gold text-obsidian font-bold shadow-md'
+                                : 'bg-charcoal border border-charcoal-light text-cream-muted hover:text-cream hover:border-gold/30'
+                            }`}
+                          >
+                            {st === 'ALL' ? 'All Orders' : st === 'CANCELLED' ? 'Cancelled' : st}
+                          </button>
+                        )
+                      }
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSyncShiprocketStatuses}
+                    disabled={isSyncingStatuses}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/30 text-xs font-bold hover:bg-gold hover:text-obsidian transition-all cursor-pointer disabled:opacity-50 whitespace-nowrap ml-1 shrink-0"
+                    title="Poll Shiprocket API to verify if any shipments have been cancelled by seller"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStatuses ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingStatuses ? 'Syncing...' : 'Sync Shiprocket'}</span>
+                  </button>
                 </div>
               </div>
 
@@ -1528,14 +1678,33 @@ export default function AdminPanelPage() {
                                   >
                                     Shipped
                                   </option>
+                                  <option
+                                    value="CANCELLED"
+                                    className="bg-charcoal text-red-400 font-semibold"
+                                  >
+                                    Cancelled by Seller
+                                  </option>
                                 </select>
                                 <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                               </div>
                             </td>
 
-                            {/* Actions / Generate AWB */}
+                            {/* Actions / Generate AWB / Cancel on Shiprocket */}
                             <td className="px-5 py-4 align-top text-right whitespace-nowrap">
-                              {generatingAwb[order.id] ? (
+                              {order.status === 'CANCELLED' ? (
+                                <div className="inline-flex flex-col items-end gap-1">
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/40 text-xs font-semibold text-red-400 shadow-sm">
+                                    <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                    <span>Cancelled on Shiprocket</span>
+                                  </div>
+                                  <span
+                                    className="text-[10px] text-cream-muted/50 max-w-[170px] truncate text-right"
+                                    title={order.cancellation_reason || 'Merchant Cancelled'}
+                                  >
+                                    {order.cancellation_reason || 'Shipment Voided'}
+                                  </span>
+                                </div>
+                              ) : generatingAwb[order.id] ? (
                                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gold/10 border border-gold/30 text-xs font-bold text-gold cursor-wait">
                                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                   <span>Generating AWB...</span>
@@ -1597,16 +1766,35 @@ export default function AdminPanelPage() {
                                     >
                                       Regenerate
                                     </button>
+                                    <span className="text-cream-muted/30">·</span>
+                                    <button
+                                      onClick={() => handleCancelShiprocketOrder(order.id)}
+                                      disabled={cancellingOrder[order.id]}
+                                      className="text-[10px] text-red-400/80 hover:text-red-300 hover:underline cursor-pointer font-medium disabled:opacity-50"
+                                      title="Cancel this order on Shiprocket and update customer live tracking"
+                                    >
+                                      {cancellingOrder[order.id] ? 'Cancelling...' : 'Cancel'}
+                                    </button>
                                   </div>
                                 </div>
                               ) : (
-                                <button
-                                  onClick={() => handleGenerateAwb(order.id)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/40 text-xs font-bold hover:bg-gold hover:text-obsidian transition-all shadow-[0_0_10px_rgba(207,181,59,0.1)] cursor-pointer"
-                                >
-                                  <Truck className="w-3.5 h-3.5" />
-                                  <span>Generate AWB</span>
-                                </button>
+                                <div className="inline-flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleGenerateAwb(order.id)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/40 text-xs font-bold hover:bg-gold hover:text-obsidian transition-all shadow-[0_0_10px_rgba(207,181,59,0.1)] cursor-pointer"
+                                  >
+                                    <Truck className="w-3.5 h-3.5" />
+                                    <span>Generate AWB</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelShiprocketOrder(order.id)}
+                                    disabled={cancellingOrder[order.id]}
+                                    className="p-1.5 rounded-lg bg-charcoal border border-charcoal-light text-cream-muted/70 hover:text-red-400 hover:border-red-500/40 transition-colors cursor-pointer"
+                                    title="Cancel Order on Shiprocket"
+                                  >
+                                    <Ban className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -2574,6 +2762,78 @@ export default function AdminPanelPage() {
                       }`}
                     />
                   </button>
+                </div>
+
+                {/* Auto-Sync Cancellations from Shiprocket Toggle */}
+                <div className="flex items-center justify-between p-4 rounded-lg bg-obsidian border border-charcoal-light">
+                  <div>
+                    <span className="text-xs font-semibold text-cream block">
+                      Auto-Sync Cancellations from Shiprocket
+                    </span>
+                    <span className="text-[11px] text-cream-muted/60">
+                      Instantly halt customer live tracking and update status if an order is cancelled on Shiprocket by seller
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        autoSyncCancellations: !settings.autoSyncCancellations,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      settings.autoSyncCancellations !== false ? 'bg-gold' : 'bg-charcoal-light'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        settings.autoSyncCancellations !== false
+                          ? 'translate-x-5'
+                          : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Shiprocket Webhook Endpoint Helper */}
+                <div className="p-4 rounded-lg bg-obsidian/80 border border-charcoal-light space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-gold" />
+                      <span className="text-xs font-bold text-cream">
+                        Shiprocket Webhook Endpoint (Instant Cancellation Sync)
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                      Active Listener
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-cream-muted/70 leading-relaxed">
+                    Paste this webhook URL into your <strong>Shiprocket Dashboard → Settings → API → Webhooks</strong> for the <em>"Order Cancellation"</em> and <em>"Shipment Cancellation"</em> events. When you cancel an order in Shiprocket, the customer's live tracking page halts and updates in real-time.
+                  </p>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== 'undefined' ? window.location.origin : 'https://outframelabs.in'}/api/shiprocket-webhook`}
+                      className="flex-1 px-3 py-2 rounded-lg bg-charcoal border border-charcoal-light text-xs font-mono text-cream focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${typeof window !== 'undefined' ? window.location.origin : 'https://outframelabs.in'}/api/shiprocket-webhook`
+                        navigator.clipboard?.writeText(url)
+                        showToast('Shiprocket Webhook URL copied to clipboard!', 'success')
+                      }}
+                      className="px-3 py-2 rounded-lg bg-gold/15 text-gold border border-gold/30 hover:bg-gold hover:text-obsidian transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Webhook URL</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 

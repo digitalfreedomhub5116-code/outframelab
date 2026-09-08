@@ -176,6 +176,33 @@ export default async function handler(req, res) {
       }
     }
 
+    // Cancel on Shiprocket via GET
+    if (action === 'cancel' && orderParam) {
+      try {
+        const result = await handleCancelOrder({
+          supabase,
+          orderId: orderParam,
+          reason: query.reason || 'Cancelled by seller on Shiprocket',
+        })
+        return sendJson(res, result.success ? 200 : 400, result)
+      } catch (err) {
+        return sendJson(res, 500, { success: false, error: err.message })
+      }
+    }
+
+    // Sync status with Shiprocket via GET
+    if (action === 'sync') {
+      try {
+        const result = await handleSyncOrders({
+          supabase,
+          orderId: orderParam,
+        })
+        return sendJson(res, 200, result)
+      } catch (err) {
+        return sendJson(res, 500, { success: false, error: err.message })
+      }
+    }
+
     return sendJson(res, 200, {
       success: true,
       connected: true,
@@ -192,8 +219,28 @@ export default async function handler(req, res) {
 
   try {
     const body = await parseRequestBody(req)
+    const action = body.action
     const orderId = body.orderId || body.order_id
     const fallbackOrderData = body.orderData || null
+
+    // Cancel order action via POST
+    if (action === 'cancel' && (orderId || fallbackOrderData?.id)) {
+      const result = await handleCancelOrder({
+        supabase,
+        orderId: orderId || fallbackOrderData?.id,
+        reason: body.reason || 'Cancelled by seller on Shiprocket',
+      })
+      return sendJson(res, result.success ? 200 : 400, result)
+    }
+
+    // Sync order statuses action via POST
+    if (action === 'sync') {
+      const result = await handleSyncOrders({
+        supabase,
+        orderId: orderId || null,
+      })
+      return sendJson(res, 200, result)
+    }
 
     if (!orderId && !fallbackOrderData?.id) {
       return sendJson(res, 400, {
@@ -634,5 +681,275 @@ async function updateDatabaseWithAwb({
     }
   } catch (err) {
     console.warn('Notice: Could not write to Supabase table (non-blocking):', err)
+  }
+}
+
+/**
+ * Handle cancelling an order on Shiprocket and updating Supabase database
+ */
+async function handleCancelOrder({ supabase, orderId, reason = 'Cancelled by seller on Shiprocket' }) {
+  if (!orderId) {
+    return { success: false, error: 'Order ID is required to cancel order.' }
+  }
+
+  const nowIso = new Date().toISOString()
+  let order = null
+  let shipment = null
+
+  if (supabase) {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+    let q = supabase.from('orders').select('*, shipments(*)')
+    if (isUUID) {
+      q = q.or(`id.eq.${orderId},order_number.eq.${orderId}`)
+    } else {
+      q = q.eq('order_number', String(orderId).trim())
+    }
+    const { data } = await q.maybeSingle()
+    order = data
+    shipment = Array.isArray(order?.shipments) ? order.shipments[0] : order?.shipments
+  }
+
+  // Attempt to cancel on Shiprocket API if credentials exist
+  let shiprocketCancelled = false
+  let shiprocketMsg = null
+
+  try {
+    const token = await getShiprocketAuthToken()
+    if (token) {
+      const shiprocketOrderId = shipment?.shiprocket_order_id
+      const awbCode = shipment?.awb_code
+
+      if (shiprocketOrderId) {
+        const cancelRes = await fetch('https://apiv2.shiprocket.in/v1/external/orders/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ids: [Number(shiprocketOrderId)] }),
+        })
+        const cancelData = await cancelRes.json()
+        shiprocketCancelled = cancelRes.ok
+        shiprocketMsg = cancelData?.message || JSON.stringify(cancelData)
+      } else if (awbCode) {
+        const cancelRes = await fetch('https://apiv2.shiprocket.in/v1/external/orders/cancel/shipment/awbs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ awbs: [String(awbCode)] }),
+        })
+        const cancelData = await cancelRes.json()
+        shiprocketCancelled = cancelRes.ok
+        shiprocketMsg = cancelData?.message || JSON.stringify(cancelData)
+      }
+    }
+  } catch (err) {
+    console.warn('Shiprocket API cancel request warning:', err.message)
+  }
+
+  // Update Supabase records
+  if (supabase && order?.id) {
+    let parsedNotes = {}
+    try {
+      if (order.notes) {
+        parsedNotes = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes
+      }
+    } catch (e) {}
+
+    parsedNotes.cancelled_at = nowIso
+    parsedNotes.cancellation_source = 'Shiprocket Merchant Cancellation'
+    parsedNotes.cancellation_reason = reason
+    if (shiprocketMsg) parsedNotes.shiprocket_cancel_response = shiprocketMsg
+
+    // Update orders table
+    await supabase
+      .from('orders')
+      .update({
+        status: 'CANCELLED',
+        notes: JSON.stringify(parsedNotes),
+        updated_at: nowIso,
+      })
+      .eq('id', order.id)
+
+    // Update shipments table
+    await supabase
+      .from('shipments')
+      .update({
+        status: 'CANCELLED',
+        updated_at: nowIso,
+      })
+      .eq('order_id', order.id)
+
+    // Insert tracking event
+    await supabase.from('tracking_events').insert({
+      order_id: order.id,
+      shipment_id: shipment?.id || null,
+      status: 'CANCELLED',
+      activity: `Order cancelled on Shiprocket by seller. Reason: ${reason}. Live tracking halted.`,
+      location: 'Merchant Fulfillment Hub (Satara)',
+      event_time: nowIso,
+    })
+
+    return {
+      success: true,
+      message: `Order #${order.order_number || order.id} has been cancelled on Shiprocket. Live tracking updated.`,
+      order_id: order.id,
+      order_number: order.order_number,
+      shiprocket_cancelled: shiprocketCancelled,
+      shiprocket_response: shiprocketMsg,
+    }
+  }
+
+  return {
+    success: true,
+    message: `Order cancellation processed.`,
+    shiprocket_cancelled: shiprocketCancelled,
+    shiprocket_response: shiprocketMsg,
+  }
+}
+
+/**
+ * Handle syncing order status with Shiprocket (detects seller cancellations & tracking updates)
+ */
+async function handleSyncOrders({ supabase, orderId }) {
+  if (!supabase) {
+    return { success: false, error: 'Database not initialized.' }
+  }
+
+  const nowIso = new Date().toISOString()
+  let ordersToCheck = []
+
+  if (orderId) {
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim())
+    let q = supabase.from('orders').select('*, shipments(*)')
+    if (isUUID) {
+      q = q.or(`id.eq.${orderId},order_number.eq.${orderId}`)
+    } else {
+      q = q.eq('order_number', String(orderId).trim())
+    }
+    const { data } = await q.maybeSingle()
+    if (data) ordersToCheck = [data]
+  } else {
+    // Check all open orders that have shipments and are not already CANCELLED or DELIVERED
+    const { data } = await supabase
+      .from('orders')
+      .select('*, shipments(*)')
+      .neq('status', 'CANCELLED')
+      .neq('status', 'CANCELED')
+      .neq('status', 'DELIVERED')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (data) ordersToCheck = data
+  }
+
+  let token = null
+  try {
+    token = await getShiprocketAuthToken()
+  } catch (e) {
+    console.warn('Could not get Shiprocket token for sync:', e.message)
+  }
+
+  const updatedCancellations = []
+
+  for (const ord of ordersToCheck) {
+    const shipment = Array.isArray(ord.shipments) ? ord.shipments[0] : ord.shipments
+    const shiprocketOrderId = shipment?.shiprocket_order_id
+    const awbCode = shipment?.awb_code
+
+    if (!shiprocketOrderId && !awbCode) continue
+    if (!token) continue
+
+    try {
+      let isCancelledOnShiprocket = false
+      let cancelReason = 'Shiprocket Merchant Portal'
+
+      // Check via Shiprocket order show endpoint
+      if (shiprocketOrderId) {
+        const checkRes = await fetch(`https://apiv2.shiprocket.in/v1/external/orders/show/${shiprocketOrderId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (checkRes.ok) {
+          const checkData = await checkRes.json()
+          const orderData = checkData?.data || checkData
+          const st = (orderData?.status || orderData?.order_status || '').toUpperCase()
+          const statusCode = orderData?.status_code
+          if (st.includes('CANCEL') || statusCode === 5 || statusCode === '5') {
+            isCancelledOnShiprocket = true
+            cancelReason = orderData?.cancel_reason || orderData?.reason || 'Cancelled by seller on Shiprocket'
+          }
+        }
+      }
+
+      // If not detected via show, check via courier track AWB
+      if (!isCancelledOnShiprocket && awbCode) {
+        const trackRes = await fetch(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${awbCode}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (trackRes.ok) {
+          const trackData = await trackRes.json()
+          const currentStatus = (trackData?.tracking_data?.shipment_track?.[0]?.current_status || '').toUpperCase()
+          if (currentStatus.includes('CANCEL') || trackData?.tracking_data?.shipment_status === 5) {
+            isCancelledOnShiprocket = true
+            cancelReason = 'Cancelled on Shiprocket courier tracking'
+          }
+        }
+      }
+
+      if (isCancelledOnShiprocket) {
+        let parsedNotes = {}
+        try {
+          if (ord.notes) {
+            parsedNotes = typeof ord.notes === 'string' ? JSON.parse(ord.notes) : ord.notes
+          }
+        } catch (e) {}
+
+        parsedNotes.cancelled_at = nowIso
+        parsedNotes.cancellation_source = 'Shiprocket Sync Poll'
+        parsedNotes.cancellation_reason = cancelReason
+
+        await supabase
+          .from('orders')
+          .update({
+            status: 'CANCELLED',
+            notes: JSON.stringify(parsedNotes),
+            updated_at: nowIso,
+          })
+          .eq('id', ord.id)
+
+        await supabase
+          .from('shipments')
+          .update({
+            status: 'CANCELLED',
+            updated_at: nowIso,
+          })
+          .eq('order_id', ord.id)
+
+        await supabase.from('tracking_events').insert({
+          order_id: ord.id,
+          shipment_id: shipment?.id || null,
+          status: 'CANCELLED',
+          activity: `Order cancelled on Shiprocket by seller. Live tracking updated.`,
+          location: 'Merchant Fulfillment Hub (Satara)',
+          event_time: nowIso,
+        })
+
+        updatedCancellations.push({
+          order_id: ord.id,
+          order_number: ord.order_number,
+          reason: cancelReason,
+        })
+      }
+    } catch (err) {
+      console.warn(`Sync check error for order ${ord.order_number}:`, err.message)
+    }
+  }
+
+  return {
+    success: true,
+    checked_count: ordersToCheck.length,
+    updated_cancellations: updatedCancellations,
+    timestamp: nowIso,
   }
 }

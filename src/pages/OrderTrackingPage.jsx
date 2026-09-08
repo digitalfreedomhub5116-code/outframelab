@@ -12,7 +12,11 @@ import {
   User,
   Sparkles,
   Truck,
-  MapPin
+  MapPin,
+  AlertCircle,
+  XCircle,
+  Headphones,
+  RotateCcw
 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -111,6 +115,23 @@ export default function OrderTrackingPage() {
     try {
       const orders = await getUserOrders(user)
       setUserOrders(orders || [])
+
+      // Auto-sync cancellations from Shiprocket in background
+      const openOrders = (orders || []).filter(
+        (o) => o.status !== 'CANCELLED' && o.status !== 'CANCELED' && o.status !== 'DELIVERED'
+      )
+      if (openOrders.length > 0) {
+        fetch('/api/generate-awb?action=sync')
+          .then((r) => r.json())
+          .then((syncData) => {
+            if (syncData?.updated_cancellations?.length > 0) {
+              getUserOrders(user).then((fresh) => {
+                if (fresh) setUserOrders(fresh)
+              })
+            }
+          })
+          .catch(() => {})
+      }
     } catch (e) {
       console.warn('Failed to load user orders:', e)
     } finally {
@@ -137,6 +158,20 @@ export default function OrderTrackingPage() {
 
       if (res) {
         setSearchedOrder(res)
+
+        // If order is active, trigger live status sync check with Shiprocket
+        if (res.status !== 'CANCELLED' && res.status !== 'CANCELED' && res.status !== 'DELIVERED') {
+          fetch(`/api/generate-awb?action=sync&orderId=${encodeURIComponent(res.order_number || res.id)}`)
+            .then((r) => r.json())
+            .then((syncData) => {
+              if (syncData?.updated_cancellations?.length > 0) {
+                getOrder(idToSearch).then((fresh) => {
+                  if (fresh) setSearchedOrder(fresh)
+                })
+              }
+            })
+            .catch(() => {})
+        }
       } else {
         setSearchedOrder(null)
         setNotFound(true)
@@ -375,6 +410,12 @@ function OrderCard({
   // Map status to badge color & label
   const getStatusBadge = (status) => {
     switch (status) {
+      case 'CANCELLED':
+      case 'CANCELED':
+        return {
+          bg: 'bg-red-500/15 border-red-500/40 text-red-400',
+          label: 'Cancelled by Seller',
+        }
       case 'DELIVERED':
         return {
           bg: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400',
@@ -410,10 +451,29 @@ function OrderCard({
     }
   }
 
+  const isCancelled =
+    order.status === 'CANCELLED' ||
+    order.status === 'CANCELED' ||
+    String(order.status || '').toUpperCase().includes('CANCEL')
+
+  let cancelDetails = null
+  try {
+    if (order.notes) {
+      const parsed = typeof order.notes === 'string' ? JSON.parse(order.notes) : order.notes
+      if (parsed && (parsed.cancelled_at || parsed.cancellation_reason || parsed.cancellation_source)) {
+        cancelDetails = parsed
+      }
+    }
+  } catch (e) {}
+
   const badge = getStatusBadge(order.status)
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-charcoal/80 shadow-2xl overflow-hidden backdrop-blur-sm transition-all duration-300 hover:border-gold/45">
+    <div className={`rounded-2xl border shadow-2xl overflow-hidden backdrop-blur-sm transition-all duration-300 ${
+      isCancelled
+        ? 'border-red-500/30 bg-charcoal/90 hover:border-red-500/50'
+        : 'border-gold/25 bg-charcoal/80 hover:border-gold/45'
+    }`}>
       {/* ── 1. Top Order Summary Header ── */}
       <div className="border-b border-charcoal-light/70 bg-obsidian/85 px-5 py-4 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -496,15 +556,21 @@ function OrderCard({
                         <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
                         {badge.label}
                       </span>
-                      <span className="text-xs text-cream-muted/70">
-                        {order.shipment?.estimated_delivery
-                          ? `Est. Delivery: ${new Date(order.shipment.estimated_delivery).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`
-                          : 'Estimated Delivery: 3-4 Days'}
-                      </span>
+                      {isCancelled ? (
+                        <span className="text-xs font-semibold text-red-400/90">
+                          Cancelled on Shiprocket by Seller
+                        </span>
+                      ) : (
+                        <span className="text-xs text-cream-muted/70">
+                          {order.shipment?.estimated_delivery
+                            ? `Est. Delivery: ${new Date(order.shipment.estimated_delivery).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`
+                            : 'Estimated Delivery: 3-4 Days'}
+                        </span>
+                      )}
                     </div>
 
                     <span className="text-[11px] text-cream-muted/50 font-mono">
-                      Carrier: {order.shipment?.courier_partner || 'Delhivery Air'}
+                      Carrier: {order.shipment?.courier_partner || 'Shiprocket Express'}
                     </span>
                   </div>
                 </div>
@@ -513,82 +579,201 @@ function OrderCard({
           )}
         </div>
 
-        {/* ── 3. Vertical Checkpoints (Each Down of Each Other — Matched to Image 2) ── */}
-        <div className="pt-4 border-t border-charcoal-light/70">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-cream-muted/70 mb-5 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-gold" />
-            <span>Fulfillment Pipeline</span>
-          </h4>
-
-          <div className="relative pl-3 sm:pl-4 space-y-6 sm:space-y-7">
-            {/* Connected Vertical Progress Line */}
-            <div className="absolute left-[23px] sm:left-[27px] top-4 bottom-4 w-0.5 bg-charcoal-light">
-              <div
-                className="w-full bg-gradient-to-b from-gold via-yellow-300 to-gold transition-all duration-700"
-                style={{
-                  height: `${Math.min(100, (currentStageIndex / (STAGES.length - 1)) * 100)}%`,
-                }}
-              />
-            </div>
-
-            {STAGES.map((stage, idx) => {
-              const isDone = idx <= currentStageIndex
-              const isCurrent = idx === currentStageIndex
-              const StageIcon = stage.icon || Check
-
-              return (
-                <div key={stage.key} className="relative flex items-start gap-4 sm:gap-5 group">
-                  {/* Glowing Node on Vertical Line */}
-                  <div className="relative z-10 shrink-0">
-                    <div
-                      className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center transition-all duration-500 ${
-                        isCurrent
-                          ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/35 shadow-xl shadow-gold/50 scale-105'
-                          : isDone
-                          ? 'bg-gold text-obsidian font-bold shadow-md shadow-gold/25'
-                          : 'bg-charcoal border border-charcoal-light text-cream-muted/30'
-                      }`}
-                    >
-                      {isDone && !isCurrent ? (
-                        <Check className="h-5 w-5 stroke-[2.5]" />
-                      ) : (
-                        <StageIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${isCurrent ? 'animate-pulse' : ''}`} />
-                      )}
-                    </div>
+        {/* ── 3. Checkpoints or Dedicated Cancellation Notice ── */}
+        {isCancelled ? (
+          <div className="pt-4 border-t border-red-500/20 space-y-6">
+            {/* Prominent Red Cancellation & Refund Alert Card */}
+            <div className="rounded-2xl border border-red-500/40 bg-gradient-to-br from-red-950/40 via-charcoal/90 to-obsidian p-5 sm:p-6 shadow-xl shadow-red-950/30">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-red-500/20 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-11 w-11 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 flex items-center justify-center shrink-0">
+                    <AlertCircle className="h-6 w-6" />
                   </div>
-
-                  {/* Side Checkpoint Details: Step Number, Title, and Description */}
-                  <div className="flex-1 min-w-0 pt-0.5 sm:pt-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`font-mono text-xs sm:text-sm font-extrabold italic tracking-wider ${
-                          isCurrent ? 'text-gold' : isDone ? 'text-gold/80' : 'text-cream-muted/30'
-                        }`}
-                      >
-                        {stage.step}
-                      </span>
-                      <h5
-                        className={`font-heading text-sm sm:text-base font-bold tracking-tight ${
-                          isCurrent ? 'text-gold' : isDone ? 'text-cream' : 'text-cream-muted/50'
-                        }`}
-                      >
-                        {stage.label}
-                      </h5>
-                      {isCurrent && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gold/15 text-gold border border-gold/30 shrink-0">
-                          Active Stage
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-cream-muted/70 mt-1 leading-relaxed">
-                      {stage.desc}
+                  <div>
+                    <h4 className="font-heading text-base sm:text-lg font-bold text-red-300">
+                      Order Cancelled by Seller
+                    </h4>
+                    <p className="text-xs text-cream-muted/70">
+                      Merchant cancelled package dispatch on Shiprocket logistics hub
                     </p>
                   </div>
                 </div>
-              )
-            })}
+
+                <span className="self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                  Shipment Voided
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <span className="text-cream-muted/50 uppercase tracking-wider text-[10px] font-semibold">
+                    Cancellation Reason
+                  </span>
+                  <p className="text-cream font-medium">
+                    {cancelDetails?.cancellation_reason || 'Seller cancelled shipment on Shiprocket courier portal'}
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-cream-muted/50 uppercase tracking-wider text-[10px] font-semibold">
+                    Cancellation Time
+                  </span>
+                  <p className="text-cream font-medium">
+                    {cancelDetails?.cancelled_at
+                      ? new Date(cancelDetails.cancelled_at).toLocaleString('en-IN', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })
+                      : formattedDate}
+                  </p>
+                </div>
+              </div>
+
+              {/* Refund Notice */}
+              <div className="mt-4 p-3.5 rounded-xl bg-obsidian/80 border border-charcoal-light flex items-start gap-3">
+                <RotateCcw className="h-4 w-4 text-gold shrink-0 mt-0.5" />
+                <div className="text-xs leading-relaxed">
+                  {order.payment_method === 'PREPAID' ? (
+                    <p className="text-cream">
+                      <strong className="text-gold">100% Refund Initiated:</strong> Your prepaid payment of <strong className="text-cream">₹{order.total_amount}</strong> has been refunded to your original payment method and will reflect in 3–5 business days.
+                    </p>
+                  ) : (
+                    <p className="text-cream">
+                      <strong className="text-cream">Cash on Delivery:</strong> No payment was collected. The order was cancelled before courier delivery.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Help and Support */}
+              <div className="mt-4 pt-3 border-t border-charcoal-light/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <span className="text-cream-muted/60">
+                  Questions regarding this cancellation?
+                </span>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`mailto:support@outframelabs.in?subject=Help with Cancelled Order ${order.order_number}`}
+                    className="inline-flex items-center gap-1.5 text-gold hover:underline font-semibold cursor-pointer"
+                  >
+                    <Headphones className="h-3.5 w-3.5" />
+                    <span>Contact Studio Support</span>
+                  </a>
+                  <span className="text-cream-muted/30">·</span>
+                  <Link
+                    to="/"
+                    className="text-cream hover:text-gold transition-colors font-semibold"
+                  >
+                    Explore Other Drops →
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Cancelled Timeline State */}
+            <div className="relative pl-3 sm:pl-4 space-y-6 pt-2">
+              <div className="relative flex items-start gap-4 sm:gap-5">
+                <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-gold text-obsidian font-bold flex items-center justify-center shrink-0 shadow-md shadow-gold/25">
+                  <Check className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <div className="pt-1">
+                  <span className="font-mono text-xs text-gold font-bold italic">01</span>
+                  <h5 className="font-heading text-sm font-bold text-cream">Order Placed</h5>
+                  <p className="text-xs text-cream-muted/70">Order confirmed on Outframe Labs</p>
+                </div>
+              </div>
+
+              <div className="relative flex items-start gap-4 sm:gap-5">
+                <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-full bg-red-500/20 border-2 border-red-500 text-red-400 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/30">
+                  <XCircle className="h-5 w-5 animate-pulse" />
+                </div>
+                <div className="pt-1">
+                  <span className="font-mono text-xs text-red-400 font-bold italic">02</span>
+                  <h5 className="font-heading text-sm font-bold text-red-400">Cancelled by Seller on Shiprocket</h5>
+                  <p className="text-xs text-cream-muted/70">
+                    Dispatch stopped at fulfillment center. Live tracking halted.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Standard 6-checkpoint pipeline */
+          <div className="pt-4 border-t border-charcoal-light/70">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-cream-muted/70 mb-5 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-gold" />
+              <span>Fulfillment Pipeline</span>
+            </h4>
+
+            <div className="relative pl-3 sm:pl-4 space-y-6 sm:space-y-7">
+              {/* Connected Vertical Progress Line */}
+              <div className="absolute left-[23px] sm:left-[27px] top-4 bottom-4 w-0.5 bg-charcoal-light">
+                <div
+                  className="w-full bg-gradient-to-b from-gold via-yellow-300 to-gold transition-all duration-700"
+                  style={{
+                    height: `${Math.min(100, (currentStageIndex / (STAGES.length - 1)) * 100)}%`,
+                  }}
+                />
+              </div>
+
+              {STAGES.map((stage, idx) => {
+                const isDone = idx <= currentStageIndex
+                const isCurrent = idx === currentStageIndex
+                const StageIcon = stage.icon || Check
+
+                return (
+                  <div key={stage.key} className="relative flex items-start gap-4 sm:gap-5 group">
+                    {/* Glowing Node on Vertical Line */}
+                    <div className="relative z-10 shrink-0">
+                      <div
+                        className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full flex items-center justify-center transition-all duration-500 ${
+                          isCurrent
+                            ? 'bg-obsidian border-2 border-gold text-gold ring-4 ring-gold/35 shadow-xl shadow-gold/50 scale-105'
+                            : isDone
+                            ? 'bg-gold text-obsidian font-bold shadow-md shadow-gold/25'
+                            : 'bg-charcoal border border-charcoal-light text-cream-muted/30'
+                        }`}
+                      >
+                        {isDone && !isCurrent ? (
+                          <Check className="h-5 w-5 stroke-[2.5]" />
+                        ) : (
+                          <StageIcon className={`h-4 w-4 sm:h-5 sm:w-5 ${isCurrent ? 'animate-pulse' : ''}`} />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Side Checkpoint Details: Step Number, Title, and Description */}
+                    <div className="flex-1 min-w-0 pt-0.5 sm:pt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`font-mono text-xs sm:text-sm font-extrabold italic tracking-wider ${
+                            isCurrent ? 'text-gold' : isDone ? 'text-gold/80' : 'text-cream-muted/30'
+                          }`}
+                        >
+                          {stage.step}
+                        </span>
+                        <h5
+                          className={`font-heading text-sm sm:text-base font-bold tracking-tight ${
+                            isCurrent ? 'text-gold' : isDone ? 'text-cream' : 'text-cream-muted/50'
+                          }`}
+                        >
+                          {stage.label}
+                        </h5>
+                        {isCurrent && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gold/15 text-gold border border-gold/30 shrink-0">
+                            Active Stage
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-cream-muted/70 mt-1 leading-relaxed">
+                        {stage.desc}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
