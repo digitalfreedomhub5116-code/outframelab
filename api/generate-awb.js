@@ -135,11 +135,15 @@ export default async function handler(req, res) {
     }
 
     // 1. Initialize Supabase Client
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const supabaseUrl =
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      'https://sooedjbqgrdjtwiobjpr.supabase.co'
     const supabaseKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvb2VkamJxZ3JkanR3aW9ianByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDU1NzksImV4cCI6MjEwNDMyMTU3OX0.dgKiyPzjtiTTFFVH8QhpWHI3QTXAOelwiBBBngboGiI'
 
     let supabase = null
     if (supabaseUrl && supabaseKey) {
