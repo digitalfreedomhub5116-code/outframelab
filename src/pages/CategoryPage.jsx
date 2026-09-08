@@ -8,14 +8,6 @@ import CartDrawer from '../components/CartDrawer'
 import ReviewsModal from '../components/ReviewsModal'
 import WishlistDrawer from '../components/WishlistDrawer'
 
-const GENRE_COMING_SOON_GIFS = {
-  MARVEL: 'https://media.tenor.com/cUDKyJkDr6kAAAAM/iron-man-iron-man-hammer.gif',
-  DC: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
-  ANIME: 'https://media.tenor.com/A8rfrx1u11YAAAAM/forge-blacksmiths.gif',
-  CARS: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
-  VALORANT: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
-  DEFAULT: 'https://media.tenor.com/AteWDUebhk4AAAAM/3dprint-3d-printing.gif',
-}
 
 function ProductCard({ product }) {
   const navigate = useNavigate()
@@ -265,43 +257,18 @@ export default function CategoryPage() {
               ))}
             </div>
           ) : (
-            /* Coming Soon Showcase with High-Quality GIF */
-            <div className="my-4 mx-auto max-w-2xl rounded-3xl border border-gold/30 bg-charcoal/90 p-6 sm:p-10 text-center shadow-2xl backdrop-blur-md relative overflow-hidden">
+            /* Coming Soon Showcase - Clean Text */
+            <div className="my-8 mx-auto max-w-2xl rounded-3xl border border-gold/25 bg-charcoal/80 p-8 sm:p-14 text-center shadow-2xl backdrop-blur-md relative overflow-hidden">
               {/* Background ambient gold glow */}
               <div className="absolute -top-24 -left-24 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none" />
               <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-3xl pointer-events-none" />
 
-              {/* Glowing pill badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-gold mb-6 shadow-sm">
-                <Sparkles className="h-3.5 w-3.5 text-gold animate-spin" />
-                <span>In The Workshop · Coming Soon</span>
-              </div>
-
-              {/* Animated GIF Container */}
-              <div className="relative mx-auto max-w-md overflow-hidden rounded-2xl border border-gold/30 shadow-2xl shadow-black/90 bg-obsidian group">
-                <img
-                  src={GENRE_COMING_SOON_GIFS[genre.id] || GENRE_COMING_SOON_GIFS.DEFAULT}
-                  alt={`${genre.label} designs crafting soon`}
-                  className="w-full h-56 sm:h-64 object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                  loading="eager"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-obsidian/95 via-transparent to-transparent opacity-85" />
-                <div className="absolute bottom-3 inset-x-3 flex items-center justify-between text-[11px] text-cream-muted/90 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 shadow-lg">
-                  <span className="font-mono text-gold flex items-center gap-1.5 font-semibold">
-                    <span className="h-2 w-2 rounded-full bg-gold animate-ping" />
-                    3D Printing in Progress
-                  </span>
-                  <span className="font-medium text-cream/80">Antique Gold Finish</span>
-                </div>
-              </div>
-
               {/* Heading & Subtitle */}
-              <h2 className="mt-7 font-heading text-2xl sm:text-3xl font-bold text-cream">
-                {genre.label} Artifacts Are Forging
+              <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-cream leading-tight">
+                We Are Crafting the {genre.label} Keychains
               </h2>
-              <p className="mt-3 max-w-lg mx-auto text-sm sm:text-base leading-relaxed text-cream-muted/80">
-                Our 3D print lab is currently designing and prototyping brand new outframed keychains for the{' '}
-                <strong className="text-gold font-semibold">{genre.label}</strong> universe. Check back soon for the next drop!
+              <p className="mt-4 max-w-lg mx-auto text-base sm:text-lg leading-relaxed text-cream-muted/90">
+                We are crafting the <span className="text-gold font-semibold">{genre.label}</span> keychains. Do wait for the next drop!
               </p>
 
               {/* Action Buttons */}
@@ -328,6 +295,7 @@ export default function CategoryPage() {
               </div>
             </div>
           )}
+
 
           {/* Other Universes Switcher */}
           <div id="explore-other-genres" className="mt-20 pt-10 border-t border-gold/15">
