@@ -43,118 +43,9 @@ import { GENRES } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
 import { saveProduct, getAllOrders } from '../lib/db'
 
-// Initial mock orders to ensure rich table experience out-of-the-box
-const INITIAL_ADMIN_ORDERS = [
-  {
-    id: 'OFL-2026-8912',
-    customer_name: 'Aditya Sharma',
-    customer_phone: '+91 98201 44521',
-    customer_email: 'aditya.sharma@gmail.com',
-    shipping_address: {
-      address: 'Flat 402, Skyline Towers, Baner Road',
-      city: 'Pune',
-      state: 'Maharashtra',
-      pincode: '411045',
-    },
-    items: [
-      { name: 'Iron Man Outframed Keychain', quantity: 1, price: 249, genre: 'MARVEL' },
-      { name: 'Batman Outframed Keychain', quantity: 1, price: 249, genre: 'DC' },
-    ],
-    total_amount: 558,
-    status: 'Printing on Kobra 2 Neo',
-    awb_code: null,
-    created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-  },
-  {
-    id: 'OFL-2026-8894',
-    customer_name: 'Pooja Deshmukh',
-    customer_phone: '+91 99754 11203',
-    customer_email: 'pooja.desh@outlook.com',
-    shipping_address: {
-      address: 'Plot 12, Shivajinagar',
-      city: 'Nagpur',
-      state: 'Maharashtra',
-      pincode: '440010',
-    },
-    items: [
-      { name: 'Porsche Outframed Keychain', quantity: 1, price: 249, genre: 'CARS' },
-    ],
-    total_amount: 309,
-    status: 'Payment Received',
-    awb_code: null,
-    created_at: new Date(Date.now() - 3600000 * 7).toISOString(),
-  },
-  {
-    id: 'OFL-2026-8871',
-    customer_name: 'Rohan Kulkarni',
-    customer_phone: '+91 97632 99014',
-    customer_email: 'rohan.k@techcorp.in',
-    shipping_address: {
-      address: 'B-704, Phoenix Park, Kothrud',
-      city: 'Pune',
-      state: 'Maharashtra',
-      pincode: '411038',
-    },
-    items: [
-      { name: 'Gojo Outframed Keychain', quantity: 2, price: 189, genre: 'ANIME' },
-      { name: 'Sukuna Outframed Keychain', quantity: 1, price: 189, genre: 'ANIME' },
-    ],
-    total_amount: 627,
-    status: 'Packed',
-    awb_code: null,
-    created_at: new Date(Date.now() - 3600000 * 18).toISOString(),
-  },
-  {
-    id: 'OFL-2026-8840',
-    customer_name: 'Sneha Patel',
-    customer_phone: '+91 98450 67123',
-    customer_email: 'sneha.p@gmail.com',
-    shipping_address: {
-      address: '301, Marine Drive Bayview',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      pincode: '400020',
-    },
-    items: [
-      { name: 'Jett Outframed Keychain', quantity: 1, price: 249, genre: 'VALORANT' },
-      { name: 'Reyna Outframed Keychain', quantity: 1, price: 189, genre: 'VALORANT' },
-    ],
-    total_amount: 498,
-    status: 'Shipped',
-    awb_code: 'DL-MH-948102941',
-    created_at: new Date(Date.now() - 3600000 * 32).toISOString(),
-  },
-  {
-    id: 'OFL-2026-8815',
-    customer_name: 'Karan Mehra',
-    customer_phone: '+91 98112 33456',
-    customer_email: 'karan.m@gmail.com',
-    shipping_address: {
-      address: 'Villa 14, Koregaon Park',
-      city: 'Pune',
-      state: 'Maharashtra',
-      pincode: '411001',
-    },
-    items: [
-      { name: 'Naruto Outframed Keychain', quantity: 1, price: 249, genre: 'ANIME' },
-    ],
-    total_amount: 309,
-    status: 'Shipped',
-    awb_code: 'DL-MH-882710394',
-    created_at: new Date(Date.now() - 3600000 * 48).toISOString(),
-  },
-]
 
-// 7-day sales mock trend
-const SALES_TREND = [
-  { day: 'Mon', date: 'Mar 01', sales: 14200, orders: 18 },
-  { day: 'Tue', date: 'Mar 02', sales: 18600, orders: 24 },
-  { day: 'Wed', date: 'Mar 03', sales: 16900, orders: 21 },
-  { day: 'Thu', date: 'Mar 04', sales: 22400, orders: 29 },
-  { day: 'Fri', date: 'Mar 05', sales: 27800, orders: 36 },
-  { day: 'Sat', date: 'Mar 06', sales: 34500, orders: 45 },
-  { day: 'Sun', date: 'Mar 07', sales: 31200, orders: 40 },
-]
+
+
 
 // Helper function to read dropped image file and resize via Canvas to optimize storage and speed
 function readFileAsOptimizedDataUrl(file, maxWidth = 1200, quality = 0.85) {
@@ -582,7 +473,7 @@ export default function AdminPanelPage() {
         if (!isMounted) return
 
         if (!data || data.length === 0) {
-          setOrders(INITIAL_ADMIN_ORDERS)
+          setOrders([])
         } else {
           const mapped = data.map((o) => {
             let st = o.status
@@ -626,7 +517,7 @@ export default function AdminPanelPage() {
           setOrders(mapped)
         }
       } catch (e) {
-        if (isMounted) setOrders(INITIAL_ADMIN_ORDERS)
+        if (isMounted) setOrders([])
       }
     }
     fetchOrders()
@@ -960,16 +851,174 @@ export default function AdminPanelPage() {
     })
   }, [products, productSearch, genreFilter])
 
-  // KPIs
-  const totalRevenue = useMemo(() => {
-    return 148650 + orders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
+  // ── 100% REAL OVERVIEW METRICS (Strictly derived from live database records) ──
+  const validOrders = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        o.status !== 'CANCELLED' &&
+        o.status !== 'CANCELED' &&
+        !String(o.status || '').toUpperCase().includes('CANCEL')
+    )
   }, [orders])
 
-  const totalOrdersCount = 142 + orders.length
-  const pendingPrintsCount = orders.filter(
-    (o) => o.status === 'Printing on Kobra 2 Neo' || o.status === 'Payment Received'
-  ).length
-  const activeShipmentsCount = orders.filter((o) => o.status === 'Shipped').length + 18
+  // Total Real Revenue
+  const totalRevenue = useMemo(() => {
+    return validOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0)
+  }, [validOrders])
+
+  // Average Order Value
+  const avgOrderValue = useMemo(() => {
+    return validOrders.length > 0 ? Math.round(totalRevenue / validOrders.length) : 0
+  }, [totalRevenue, validOrders])
+
+  // Total Real Orders Count
+  const totalOrdersCount = orders.length
+
+  // Today's Orders Count
+  const todayOrdersCount = useMemo(() => {
+    const todayStr = new Date().toDateString()
+    return orders.filter((o) => {
+      if (!o.created_at) return false
+      return new Date(o.created_at).toDateString() === todayStr
+    }).length
+  }, [orders])
+
+  // Fulfillment Count & Rate
+  const dispatchedOrdersCount = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        (o.status === 'Shipped' || o.status === 'SHIPPED' || o.status === 'DELIVERED' || o.awb_code) &&
+        o.status !== 'CANCELLED' &&
+        o.status !== 'CANCELED'
+    ).length
+  }, [orders])
+
+  const fulfillmentRate = useMemo(() => {
+    if (orders.length === 0) return '100'
+    return ((dispatchedOrdersCount / orders.length) * 100).toFixed(1)
+  }, [dispatchedOrdersCount, orders])
+
+  // Pending Prints (Production Queue)
+  const pendingOrders = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        o.status === 'Printing on Kobra 2 Neo' ||
+        o.status === 'Payment Received' ||
+        o.status === 'CONFIRMED' ||
+        o.status === 'PLACED' ||
+        o.status === 'PACKED'
+    )
+  }, [orders])
+
+  const pendingPrintsCount = pendingOrders.length
+
+  // Total Pending Keychain Units to 3D Print
+  const pendingUnitsCount = useMemo(() => {
+    return pendingOrders.reduce((sum, o) => {
+      const items = o.items || o.order_items || []
+      const units = items.reduce((iSum, it) => iSum + (Number(it.quantity) || 1), 0)
+      return sum + (units || 1)
+    }, 0)
+  }, [pendingOrders])
+
+  const estPrintTimeText = useMemo(() => {
+    if (pendingUnitsCount === 0) return 'Queue clear • Ready for drops'
+    const totalMinutes = pendingUnitsCount * 35 // ~35 min per keychain on Kobra 2 Neo
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return `Est. print time: ~${h > 0 ? `${h}h ` : ''}${m}m (${pendingUnitsCount} units)`
+  }, [pendingUnitsCount])
+
+  // Active Shipments (Dispatched & In Transit)
+  const activeShipmentsCount = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        (o.status === 'Shipped' || o.status === 'SHIPPED' || o.status === 'IN_TRANSIT' || o.awb_code) &&
+        o.status !== 'CANCELLED' &&
+        o.status !== 'CANCELED'
+    ).length
+  }, [orders])
+
+  // Active Couriers List
+  const activeCouriersList = useMemo(() => {
+    const list = orders
+      .filter((o) => o.courier_partner)
+      .map((o) => o.courier_partner)
+    return Array.from(new Set(list))
+  }, [orders])
+
+  // 7-Day Real Sales Velocity Data (Calculated dynamically for past 7 days ending today)
+  const revenueVelocityData = useMemo(() => {
+    const days = []
+    const now = new Date()
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(now.getDate() - i)
+      const dateStr = d.toDateString()
+      const dayLabel = d.toLocaleDateString('en-IN', { weekday: 'short' })
+      const dateLabel = d.toLocaleDateString('en-IN', { month: 'short', day: '2-digit' })
+
+      const dayOrders = orders.filter((o) => {
+        if (!o.created_at) return false
+        if (o.status === 'CANCELLED' || o.status === 'CANCELED') return false
+        return new Date(o.created_at).toDateString() === dateStr
+      })
+
+      const dailyRevenue = dayOrders.reduce(
+        (sum, o) => sum + (Number(o.total_amount) || 0),
+        0
+      )
+      const dailyOrderCount = dayOrders.length
+
+      days.push({
+        day: dayLabel,
+        date: dateLabel,
+        sales: dailyRevenue,
+        orders: dailyOrderCount,
+      })
+    }
+    return days
+  }, [orders])
+
+  // Peak Sales Day in the 7-day window
+  const peakDay = useMemo(() => {
+    if (!revenueVelocityData || revenueVelocityData.length === 0) {
+      return { day: 'Today', sales: 0, date: '' }
+    }
+    return revenueVelocityData.reduce(
+      (prev, curr) => (curr.sales > prev.sales ? curr : prev),
+      revenueVelocityData[0]
+    )
+  }, [revenueVelocityData])
+
+  // Dynamically compute SVG curve and points for the real 7-day trend
+  const chartSvgData = useMemo(() => {
+    const maxSales = Math.max(...revenueVelocityData.map((d) => d.sales), 500)
+    const width = 700
+    const paddingY = 40
+    const baselineY = 200
+
+    const points = revenueVelocityData.map((item, idx) => {
+      const x = (idx / 6) * width
+      const ratio = item.sales / maxSales
+      const y = baselineY - ratio * (baselineY - paddingY)
+      return { x, y, ...item }
+    })
+
+    // Construct smooth bezier curve
+    let linePath = `M ${points[0].x} ${points[0].y}`
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i]
+      const p1 = points[i + 1]
+      const mx = (p0.x + p1.x) / 2
+      linePath += ` C ${mx} ${p0.y}, ${mx} ${p1.y}, ${p1.x} ${p1.y}`
+    }
+
+    const areaPath = `${linePath} L 700 220 L 0 220 Z`
+
+    return { points, linePath, areaPath, maxSales }
+  }, [revenueVelocityData])
 
   // Status Badge Colors
   const getStatusBadgeStyle = (st) => {
@@ -1205,12 +1254,12 @@ export default function AdminPanelPage() {
                     <span className="text-2xl font-heading font-black text-cream">
                       ₹{totalRevenue.toLocaleString('en-IN')}
                     </span>
-                    <span className="text-xs font-semibold text-emerald-400 flex items-center">
-                      <ArrowUpRight className="w-3 h-3" /> +14.2%
+                    <span className="text-xs font-semibold text-gold font-mono">
+                      Avg ₹{avgOrderValue}/order
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-cream-muted/50">
-                    Gross sales across all channels
+                    Gross sales across {validOrders.length} verified {validOrders.length === 1 ? 'order' : 'orders'}
                   </p>
                 </div>
 
@@ -1229,11 +1278,11 @@ export default function AdminPanelPage() {
                       {totalOrdersCount}
                     </span>
                     <span className="text-xs font-semibold text-emerald-400 flex items-center">
-                      <ArrowUpRight className="w-3 h-3" /> +8 today
+                      <ArrowUpRight className="w-3 h-3" /> +{todayOrdersCount} today
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-cream-muted/50">
-                    98.4% fulfillment rate
+                    {fulfillmentRate}% fulfillment rate ({dispatchedOrdersCount}/{totalOrdersCount} dispatched)
                   </p>
                 </div>
 
@@ -1252,11 +1301,11 @@ export default function AdminPanelPage() {
                       {pendingPrintsCount}
                     </span>
                     <span className="text-xs font-semibold text-amber-400">
-                      Queued on Kobra 2 Neo
+                      {pendingPrintsCount > 0 ? 'Queued on Kobra 2 Neo' : 'Queue Clear'}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-cream-muted/50">
-                    Est. print time: ~1h 45m
+                    {estPrintTimeText}
                   </p>
                 </div>
 
@@ -1279,12 +1328,12 @@ export default function AdminPanelPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-cream-muted/50">
-                    Dispatched from Maharashtra Hub
+                    {activeCouriersList.length > 0 ? activeCouriersList.join(' & ') : 'Dispatched from Satara Hub'}
                   </p>
                 </div>
               </div>
 
-              {/* Mock Line Chart: Sales Over Last 7 Days */}
+              {/* Real 7-Day Revenue Velocity Chart */}
               <div className="rounded-xl bg-charcoal border border-charcoal-light p-6 space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -1293,7 +1342,7 @@ export default function AdminPanelPage() {
                       7-Day Revenue Velocity
                     </h3>
                     <p className="text-xs text-cream-muted/60 mt-0.5">
-                      Daily order revenue across Marvel, DC, Anime, Cars & Valorant drops
+                      Live daily order revenue across all active collections & drops
                     </p>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
@@ -1302,12 +1351,12 @@ export default function AdminPanelPage() {
                       <span className="text-cream-muted">Daily Sales (₹)</span>
                     </div>
                     <div className="px-3 py-1 rounded bg-charcoal-light text-cream font-mono">
-                      Peak: Sat (₹34,500)
+                      Peak: {peakDay.day} {peakDay.date ? `(${peakDay.date})` : ''} · ₹{peakDay.sales.toLocaleString('en-IN')}
                     </div>
                   </div>
                 </div>
 
-                {/* Custom SVG Line Chart */}
+                {/* Dynamic SVG Line Chart */}
                 <div className="relative pt-4">
                   <div className="h-64 w-full">
                     <svg
@@ -1337,36 +1386,36 @@ export default function AdminPanelPage() {
 
                       {/* Area Fill */}
                       <path
-                        d="M 0 140 Q 58 125, 116 110 T 233 122 T 350 84 T 466 46 T 583 10 T 700 26 L 700 220 L 0 220 Z"
+                        d={chartSvgData.areaPath}
                         fill="url(#goldGradient)"
                       />
 
                       {/* Line Stroke */}
                       <path
-                        d="M 0 140 Q 58 125, 116 110 T 233 122 T 350 84 T 466 46 T 583 10 T 700 26"
+                        d={chartSvgData.linePath}
                         fill="none"
                         stroke="#CFB53B"
                         strokeWidth="3.5"
                         strokeLinecap="round"
                       />
 
-                      {/* Data Dots */}
-                      {[
-                        { cx: 0, cy: 140 },
-                        { cx: 116, cy: 110 },
-                        { cx: 233, cy: 122 },
-                        { cx: 350, cy: 84 },
-                        { cx: 466, cy: 46 },
-                        { cx: 583, cy: 10 },
-                        { cx: 700, cy: 26 },
-                      ].map((pt, i) => (
+                      {/* Data Dots with Hover Tooltips */}
+                      {chartSvgData.points.map((pt, i) => (
                         <g key={i} className="cursor-pointer group">
                           <circle
-                            cx={pt.cx}
-                            cy={pt.cy}
-                            r="5"
-                            className="fill-obsidian stroke-gold stroke-[3] transition-all group-hover:r-7"
-                          />
+                            cx={pt.x}
+                            cy={pt.y}
+                            r={pt.sales > 0 ? 6 : 4}
+                            className={`transition-all group-hover:r-8 ${
+                              pt.sales > 0
+                                ? 'fill-gold stroke-obsidian stroke-[2.5]'
+                                : 'fill-obsidian stroke-gold/60 stroke-[2]'
+                            }`}
+                          >
+                            <title>
+                              {pt.day}, {pt.date}: ₹{pt.sales.toLocaleString('en-IN')} ({pt.orders} {pt.orders === 1 ? 'order' : 'orders'})
+                            </title>
+                          </circle>
                         </g>
                       ))}
                     </svg>
@@ -1374,11 +1423,13 @@ export default function AdminPanelPage() {
 
                   {/* X-Axis Labels */}
                   <div className="flex justify-between text-xs text-cream-muted/70 pt-4 border-t border-charcoal-light">
-                    {SALES_TREND.map((item) => (
-                      <div key={item.day} className="text-center">
+                    {revenueVelocityData.map((item, idx) => (
+                      <div key={idx} className="text-center">
                         <p className="font-semibold text-cream">{item.day}</p>
                         <p className="text-[10px] text-cream-muted/50">{item.date}</p>
-                        <p className="text-[11px] font-mono text-gold mt-0.5">₹{(item.sales / 1000).toFixed(1)}k</p>
+                        <p className={`text-[11px] font-mono mt-0.5 ${item.sales > 0 ? 'text-gold font-bold' : 'text-cream-muted/40'}`}>
+                          ₹{item.sales.toLocaleString('en-IN')}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -1426,11 +1477,18 @@ export default function AdminPanelPage() {
 
                     <div className="pt-2">
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-cream-muted/70">Current Batch (Iron Man #8912):</span>
-                        <span className="text-gold font-mono font-bold">68%</span>
+                        <span className="text-cream-muted/70">
+                          Current Batch {pendingOrders[0] ? `(${pendingOrders[0].items?.[0]?.name || 'Keychain'} #${pendingOrders[0].id.slice(-4)})` : '(No pending prints)'}:
+                        </span>
+                        <span className="text-gold font-mono font-bold">
+                          {pendingOrders.length > 0 ? `${pendingOrders.length} in queue` : 'Completed'}
+                        </span>
                       </div>
                       <div className="w-full bg-charcoal-light h-2 rounded-full overflow-hidden">
-                        <div className="bg-gold h-full rounded-full transition-all duration-500" style={{ width: '68%' }} />
+                        <div
+                          className="bg-gold h-full rounded-full transition-all duration-500"
+                          style={{ width: pendingOrders.length > 0 ? '75%' : '100%' }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1447,7 +1505,7 @@ export default function AdminPanelPage() {
                         <h4 className="font-heading font-bold text-sm text-cream">
                           Maharashtra Logistics Hub
                         </h4>
-                        <p className="text-xs text-cream-muted/60">Shiprocket & Delhivery Express</p>
+                        <p className="text-xs text-cream-muted/60">Shiprocket Logistics Gateway</p>
                       </div>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
@@ -1458,11 +1516,13 @@ export default function AdminPanelPage() {
                   <div className="space-y-3 pt-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-cream-muted/70">Hub Origin:</span>
-                      <span className="font-medium text-cream">Pune / Mumbai Hub (MH-411038)</span>
+                      <span className="font-medium text-cream">Satara Hub (MH-415106) / Maharashtra Hub</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-cream-muted/70">Primary Courier:</span>
-                      <span className="font-medium text-cream">Delhivery Air / Surface</span>
+                      <span className="text-cream-muted/70">Active Couriers:</span>
+                      <span className="font-medium text-cream">
+                        {activeCouriersList.length > 0 ? activeCouriersList.join(', ') : 'Blue Dart Air / Delhivery Express'}
+                      </span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-cream-muted/70">Maharashtra Transit SLA:</span>
@@ -1474,7 +1534,9 @@ export default function AdminPanelPage() {
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-cream-muted/70">Auto-AWB Manifest:</span>
-                      <span className="text-gold font-medium">Shiprocket Aggregator Active</span>
+                      <span className="text-gold font-medium">
+                        {dispatchedOrdersCount} Manifested Shipments (Shiprocket Live)
+                      </span>
                     </div>
                   </div>
                 </div>
