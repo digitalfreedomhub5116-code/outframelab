@@ -1565,7 +1565,7 @@ export default function AdminPanelPage() {
                                     <span className="text-cream-muted/30">·</span>
 
                                     <a
-                                      href={order.label_url || `https://shiprocket.co/tracking/${order.awb_code}`}
+                                      href={order.label_url || `/api/generate-awb?action=label&orderId=${order.order_number || order.id}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center gap-1 text-emerald-400 hover:underline font-semibold"

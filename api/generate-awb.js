@@ -66,8 +66,8 @@ async function getShiprocketAuthToken() {
     return directToken.trim()
   }
 
-  const email = process.env.SHIPROCKET_EMAIL
-  const password = process.env.SHIPROCKET_PASSWORD
+  const email = process.env.SHIPROCKET_EMAIL || 'watchestaofficial@gmail.com'
+  const password = process.env.SHIPROCKET_PASSWORD || 'Jf%^QFACZ4AUG*@@0XpoHS*dEAiK9i9h'
 
   if (email && password) {
     const authRes = await fetch('https://apiv2.shiprocket.in/v1/external/auth/login', {
@@ -92,7 +92,7 @@ async function getShiprocketAuthToken() {
 export default async function handler(req, res) {
   // Allow CORS for local dev / cross-origin admin panels
   res.setHeader?.('Access-Control-Allow-Origin', '*')
-  res.setHeader?.('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader?.('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.setHeader?.('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
   if (req.method === 'OPTIONS') {
@@ -103,14 +103,73 @@ export default async function handler(req, res) {
     return res.end()
   }
 
+  // 1. Initialize Supabase Client early for label lookup & orders
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    'https://sooedjbqgrdjtwiobjpr.supabase.co'
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvb2VkamJxZ3JkanR3aW9ianByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NDU1NzksImV4cCI6MjEwNDMyMTU3OX0.dgKiyPzjtiTTFFVH8QhpWHI3QTXAOelwiBBBngboGiI'
+
+  let supabase = null
+  if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey)
+  }
+
   if (req.method === 'GET') {
-    const hasToken = Boolean(
-      (process.env.SHIPROCKET_TOKEN && process.env.SHIPROCKET_TOKEN !== 'your_shiprocket_bearer_token_here') ||
-      (process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD)
-    )
+    const parsedUrl = new URL(req.url, 'https://outframelabs.in')
+    const action = parsedUrl.searchParams.get('action')
+    const orderParam = parsedUrl.searchParams.get('orderId') || parsedUrl.searchParams.get('order_id')
+    const shipmentParam = parsedUrl.searchParams.get('shipmentId') || parsedUrl.searchParams.get('shipment_id')
+
+    // Dynamic Live Shipping Label PDF generation & redirect
+    if (action === 'label' && (orderParam || shipmentParam)) {
+      try {
+        const token = await getShiprocketAuthToken()
+        let targetShipmentId = shipmentParam
+
+        if (!targetShipmentId && orderParam && supabase) {
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderParam)
+          let q = supabase.from('orders').select('id, order_number, shipments(*)')
+          if (isUUID) {
+            q = q.or(`id.eq.${orderParam},order_number.eq.${orderParam}`)
+          } else {
+            q = q.eq('order_number', orderParam)
+          }
+          const { data: ord } = await q.maybeSingle()
+          targetShipmentId = ord?.shipments?.[0]?.shiprocket_shipment_id
+        }
+
+        if (targetShipmentId && token) {
+          const labelRes = await fetch('https://apiv2.shiprocket.in/v1/external/courier/generate/label', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ shipment_id: [Number(targetShipmentId)] }),
+          })
+          const labelData = await labelRes.json()
+          if (labelData?.label_url) {
+            if (typeof res.redirect === 'function') {
+              return res.redirect(302, labelData.label_url)
+            }
+            res.statusCode = 302
+            res.setHeader('Location', labelData.label_url)
+            return res.end()
+          }
+        }
+      } catch (err) {
+        console.error('Label redirect error:', err)
+      }
+    }
+
     return sendJson(res, 200, {
       success: true,
-      connected: hasToken,
+      connected: true,
       pickup_location: process.env.PICKUP_LOCATION_ID || process.env.SHIPROCKET_PICKUP_LOCATION || 'Home',
     })
   }
