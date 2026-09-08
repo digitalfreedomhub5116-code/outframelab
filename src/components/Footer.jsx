@@ -1,6 +1,7 @@
 import { useScrollReveal } from '../hooks/useScrollReveal'
 import { GENRES } from '../store/cartStore'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import { Phone } from 'lucide-react'
 
 export default function Footer() {
   const [ref, isVisible] = useScrollReveal(0.1)
@@ -42,7 +43,7 @@ export default function Footer() {
                 <li key={g.id}>
                   <button
                     onClick={() => handleGenreClick(g.slug)}
-                    className="text-sm text-cream-muted/70 transition-colors hover:text-gold text-left"
+                    className="text-sm text-cream-muted/70 transition-colors hover:text-gold text-left cursor-pointer"
                   >
                     {g.label} Outframed
                   </button>
@@ -51,20 +52,26 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Company */}
+          {/* Helpline Support */}
           <div>
             <h4 className="text-xs font-semibold tracking-[0.2em] text-gold uppercase">
-              Outframe Labs
+              Helpline
             </h4>
-            <ul className="mt-4 space-y-2.5">
-              {['About Us', 'Shipping Info', 'Returns', 'Contact'].map((link) => (
-                <li key={link}>
-                  <a href="#" className="text-sm text-cream-muted/70 transition-colors hover:text-gold">
-                    {link}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <p className="mt-4 text-xs text-cream-muted/70 leading-relaxed">
+              For order status, custom finish requests & studio assistance:
+            </p>
+            <div className="mt-3.5">
+              <a
+                href="tel:7470012222"
+                className="inline-flex items-center gap-2.5 rounded-xl border border-gold/30 bg-charcoal px-4 py-2.5 text-sm font-bold text-gold hover:border-gold hover:bg-gold hover:text-obsidian transition-all group shadow-md shadow-black/30"
+              >
+                <Phone className="h-4 w-4 text-gold group-hover:text-obsidian transition-colors shrink-0" />
+                <span className="font-mono tracking-wider">7470012222</span>
+              </a>
+              <span className="block mt-2 text-[11px] text-cream-muted/50">
+                Mon – Sat · 10:00 AM – 7:00 PM IST
+              </span>
+            </div>
           </div>
 
           {/* Newsletter */}
@@ -81,7 +88,7 @@ export default function Footer() {
                 placeholder="your@email.com"
                 className="flex-1 rounded-l-full border border-charcoal-light bg-charcoal px-4 py-2.5 text-sm text-cream placeholder-cream-muted/40 outline-none transition-colors focus:border-gold/50"
               />
-              <button className="rounded-r-full bg-gold px-5 py-2.5 text-sm font-bold text-obsidian transition-all hover:bg-gold-dark">
+              <button className="rounded-r-full bg-gold px-5 py-2.5 text-sm font-bold text-obsidian transition-all hover:bg-gold-dark cursor-pointer">
                 →
               </button>
             </div>
@@ -94,11 +101,27 @@ export default function Footer() {
             © 2026 Outframe Labs. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
-            {['Privacy', 'Terms', 'Shipping Policy'].map((link) => (
-              <a key={link} href="#" className="text-xs text-cream-muted/40 transition-colors hover:text-gold">
-                {link}
-              </a>
-            ))}
+            <Link
+              to="/privacy"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'instant' })}
+              className="text-xs text-cream-muted/50 transition-colors hover:text-gold"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              to="/terms"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'instant' })}
+              className="text-xs text-cream-muted/50 transition-colors hover:text-gold"
+            >
+              Terms of Service
+            </Link>
+            <Link
+              to="/shipping-policy"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'instant' })}
+              className="text-xs text-cream-muted/50 transition-colors hover:text-gold"
+            >
+              Shipping Policy
+            </Link>
           </div>
         </div>
       </div>

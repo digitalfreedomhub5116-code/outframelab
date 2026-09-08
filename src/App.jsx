@@ -9,6 +9,9 @@ import AdminPanelPage from './pages/AdminPanelPage'
 import AuthCallbackPage from './pages/AuthCallbackPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmedPage from './pages/OrderConfirmedPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import TermsPage from './pages/TermsPage'
+import ShippingPolicyPage from './pages/ShippingPolicyPage'
 
 import { initAuthListener, loadAccountCart } from './lib/db'
 
@@ -50,6 +53,11 @@ export default function App() {
         <Route path="/admin" element={<AdminPanelPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/product/:productIdOrSlug" element={<ProductPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/terms-of-service" element={<TermsPage />} />
+        <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
         <Route path="/:genreSlug" element={<CategoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
