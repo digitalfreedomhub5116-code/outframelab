@@ -164,13 +164,17 @@ export default function ProductPage() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  if (!product) {
+  if (!product || product.isHidden) {
     return (
       <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
         <Navbar />
         <div className="mx-auto max-w-xl text-center px-4 py-36">
-          <h1 className="font-heading text-4xl font-bold text-cream">Product Not Found</h1>
-          <p className="mt-3 text-cream-muted">This outframed keychain could not be located.</p>
+          <h1 className="font-heading text-4xl font-bold text-cream">Product Unavailable</h1>
+          <p className="mt-3 text-cream-muted">
+            {product?.isHidden
+              ? 'This product is currently hidden from the public catalog.'
+              : 'This outframed keychain could not be located.'}
+          </p>
           <Link
             to="/"
             className="btn-gold inline-flex items-center gap-2 mt-6 rounded-full px-6 py-3 text-xs font-bold uppercase tracking-widest"
@@ -185,7 +189,10 @@ export default function ProductPage() {
     )
   }
 
+  const isOutOfStock = product.inStock === false
+
   const handleAddToCart = () => {
+    if (isOutOfStock) return
     addItem(product)
     openCart()
   }
@@ -216,7 +223,7 @@ export default function ProductPage() {
   }
 
   const relatedProducts = allProducts.filter(
-    (p) => p.genre === product.genre && p.id !== product.id
+    (p) => p.genre === product.genre && p.id !== product.id && !p.isHidden
   ).slice(0, 4)
 
   const genreData = GENRES.find((g) => g.id === product.genre)
@@ -499,10 +506,17 @@ export default function ProductPage() {
                 </p>
 
                 {/* Stock status */}
-                <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-400">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>In Stock · Dispatched in 24 Hours</span>
-                </div>
+                {!isOutOfStock ? (
+                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>In Stock · Dispatched in 24 Hours</span>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-rose-400">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span>Currently Out of Stock · Check back soon</span>
+                  </div>
+                )}
               </div>
 
               {/* Key Features Bullet List (Requested by user) */}
@@ -539,10 +553,15 @@ export default function ProductPage() {
             <div className="mt-8 pt-6 border-t border-charcoal-light/80">
               <button
                 onClick={handleAddToCart}
-                className="btn-gold w-full flex items-center justify-center gap-3 rounded-2xl py-3.5 sm:py-4 text-sm font-bold uppercase tracking-widest shadow-xl shadow-gold/25 hover:shadow-gold/45 active:scale-98 transition-all"
+                disabled={isOutOfStock}
+                className={`w-full flex items-center justify-center gap-3 rounded-2xl py-3.5 sm:py-4 text-sm font-bold uppercase tracking-widest transition-all ${
+                  isOutOfStock
+                    ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                    : 'btn-gold shadow-xl shadow-gold/25 hover:shadow-gold/45 active:scale-98'
+                }`}
               >
                 <ShoppingBag className="h-5 w-5" />
-                <span>Add to Cart</span>
+                <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
               </button>
 
               {/* Assurance Trust Badges */}
@@ -776,17 +795,22 @@ export default function ProductPage() {
                 {product.discountBadge}
               </span>
             </div>
-            <span className="text-[10px] text-emerald-400 font-semibold block">
-              In Stock · ₹60 Shipping
+            <span className={`text-[10px] font-semibold block ${isOutOfStock ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {isOutOfStock ? 'Currently Out of Stock' : 'In Stock · ₹60 Shipping'}
             </span>
           </div>
 
           <button
             onClick={handleAddToCart}
-            className="btn-gold flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-bold uppercase tracking-wider shadow-lg shadow-gold/20"
+            disabled={isOutOfStock}
+            className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-bold uppercase tracking-wider ${
+              isOutOfStock
+                ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                : 'btn-gold shadow-lg shadow-gold/20'
+            }`}
           >
             <ShoppingBag className="h-4 w-4" />
-            <span>Add to Cart</span>
+            <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
           </button>
         </div>
       </div>

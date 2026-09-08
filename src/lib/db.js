@@ -27,7 +27,7 @@ const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
 // ── 1. PRODUCTS & CATEGORIES ──
 export async function getProducts(options = {}) {
-  const { genre } = options
+  const { genre, includeHidden = false } = options
 
   // 1. Check persistent local storage catalog
   const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, null)
@@ -35,13 +35,20 @@ export async function getProducts(options = {}) {
 
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase.from('products').select('*').eq('is_active', true)
+      let query = supabase.from('products').select('*')
+      if (!includeHidden) {
+        query = query.eq('is_hidden', false)
+      }
       if (genre) {
         query = query.eq('genre', genre)
       }
       const { data, error } = await query
       if (!error && data && data.length > 0) {
-        return data
+        return data.map((row) => ({
+          ...row,
+          inStock: row.is_active !== false,
+          isHidden: row.is_hidden === true,
+        }))
       }
     } catch (err) {
       console.warn('Supabase products fetch failed, using cached catalog', err)
@@ -49,10 +56,14 @@ export async function getProducts(options = {}) {
   }
 
   // Fallback to active catalog
-  if (genre) {
-    return catalog.filter((p) => p.genre === genre)
+  let result = catalog
+  if (!includeHidden) {
+    result = result.filter((p) => !p.isHidden)
   }
-  return catalog
+  if (genre) {
+    result = result.filter((p) => p.genre === genre)
+  }
+  return result
 }
 
 export async function getProductBySlugOrId(identifier) {
@@ -66,7 +77,13 @@ export async function getProductBySlugOrId(identifier) {
         ? supabase.from('products').select('*, product_reviews(*)').eq('id', Number(identifier)).single()
         : supabase.from('products').select('*, product_reviews(*)').eq('slug', identifier).single()
       const { data, error } = await query
-      if (!error && data) return data
+      if (!error && data) {
+        return {
+          ...data,
+          inStock: data.is_active !== false,
+          isHidden: data.is_hidden === true,
+        }
+      }
     } catch (err) {
       console.warn('Supabase product query error', err)
     }
@@ -104,6 +121,7 @@ export async function saveProduct(product) {
         image: product.image,
         gallery: product.gallery,
         is_active: product.inStock !== false,
+        is_hidden: product.isHidden === true,
         updated_at: new Date().toISOString(),
       })
     } catch (e) {

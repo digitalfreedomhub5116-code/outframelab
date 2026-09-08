@@ -2,7 +2,7 @@ import { ShoppingBag, Star, Heart } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, MOCK_PRODUCTS } from '../store/cartStore'
 import { useScrollReveal } from '../hooks/useScrollReveal'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 const PRODUCTS_PER_BATCH = 8
 
@@ -14,6 +14,7 @@ function ProductCard({ product }) {
   const toggleWishlist = useCartStore((s) => s.toggleWishlist)
   const isWishlisted = useCartStore((s) => s.isWishlisted(product.id))
   const [ref, isVisible] = useScrollReveal(0.05)
+  const isOutOfStock = product.inStock === false
 
   const handleCardClick = () => {
     navigate(`/product/${product.slug}`)
@@ -22,6 +23,7 @@ function ProductCard({ product }) {
 
   const handleAdd = (e) => {
     e.stopPropagation()
+    if (isOutOfStock) return
     addItem(product)
     openCart()
   }
@@ -44,10 +46,21 @@ function ProductCard({ product }) {
         <img
           src={product.image}
           alt={product.name}
-          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108"
+          className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
+            isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''
+          }`}
           loading="lazy"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal/80 via-transparent to-transparent opacity-60" />
+
+        {/* Out of Stock badge on image */}
+        {isOutOfStock && (
+          <div className="absolute top-2.5 left-2.5 z-10">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider uppercase bg-black/85 backdrop-blur-md text-rose-400 border border-rose-500/50 shadow-md">
+              Out of Stock
+            </span>
+          </div>
+        )}
 
         {/* Top-Right Wishlist Heart Button */}
         <button
@@ -122,15 +135,20 @@ function ProductCard({ product }) {
           </div>
         </div>
 
-        {/* 4. Compact Add to Cart Button */}
+        {/* 4. Compact Add to Cart / Out of Stock Button */}
         <div className="mt-2 pt-2 border-t border-charcoal-light/60">
           <button
             onClick={handleAdd}
-            className="btn-gold flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide shadow-sm shadow-gold/15 transition-all duration-300 hover:shadow-gold/30 hover:scale-[1.01] active:scale-95"
-            aria-label={`Add ${product.name} to cart`}
+            disabled={isOutOfStock}
+            className={`flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-wide transition-all duration-300 ${
+              isOutOfStock
+                ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                : 'btn-gold shadow-sm shadow-gold/15 hover:shadow-gold/30 hover:scale-[1.01] active:scale-95'
+            }`}
+            aria-label={isOutOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`}
           >
             <ShoppingBag className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-            <span>Add to Cart</span>
+            <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
           </button>
         </div>
       </div>
@@ -140,16 +158,17 @@ function ProductCard({ product }) {
 
 export default function ProductGrid() {
   const allProducts = useCartStore((s) => s.products)
+  const catalog = useMemo(() => allProducts.filter((p) => !p.isHidden), [allProducts])
   const [visibleCount, setVisibleCount] = useState(PRODUCTS_PER_BATCH)
   const loadMoreRef = useRef(null)
 
-  const visibleProducts = allProducts.slice(0, visibleCount)
-  const hasMore = visibleCount < allProducts.length
+  const visibleProducts = catalog.slice(0, visibleCount)
+  const hasMore = visibleCount < catalog.length
 
   // Infinite scroll trigger
   const loadMore = useCallback(() => {
-    setVisibleCount((prev) => Math.min(prev + PRODUCTS_PER_BATCH, allProducts.length))
-  }, [allProducts.length])
+    setVisibleCount((prev) => Math.min(prev + PRODUCTS_PER_BATCH, catalog.length))
+  }, [catalog.length])
 
   useEffect(() => {
     const el = loadMoreRef.current
@@ -195,7 +214,7 @@ export default function ProductGrid() {
           <div className="mt-16 flex flex-col items-center gap-2 text-center">
             <div className="h-px w-24 bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
             <p className="mt-2 text-xs text-cream-muted/50 tracking-wider uppercase">
-              All {allProducts.length} artifacts revealed
+              All {catalog.length} artifacts revealed
             </p>
           </div>
         )}

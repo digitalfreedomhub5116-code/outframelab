@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { MOCK_PRODUCTS, GENRES } from '../data/productsData'
-import { getLocalCart, saveCartToAccount } from '../lib/db'
+import { getLocalCart, saveCartToAccount, saveProduct } from '../lib/db'
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
@@ -11,7 +11,11 @@ const loadInitialProducts = () => {
     if (raw) {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed
+        return parsed.map((p) => ({
+          ...p,
+          inStock: p.inStock !== false,
+          isHidden: p.isHidden === true,
+        }))
       }
     }
   } catch (e) {
@@ -20,6 +24,7 @@ const loadInitialProducts = () => {
   return MOCK_PRODUCTS.map((p) => ({
     ...p,
     inStock: p.inStock !== false,
+    isHidden: false,
   }))
 }
 
@@ -53,6 +58,8 @@ export const useCartStore = create((set, get) => ({
           ...updatedProduct,
           slug,
           fullName,
+          inStock: updatedProduct.inStock !== undefined ? updatedProduct.inStock : p.inStock !== false,
+          isHidden: updatedProduct.isHidden !== undefined ? updatedProduct.isHidden : p.isHidden === true,
         }
       }
       return p
@@ -105,6 +112,7 @@ export const useCartStore = create((set, get) => ({
       reviewCount: 7,
       rating: 4.8,
       inStock: newProduct.inStock !== false,
+      isHidden: newProduct.isHidden === true,
       gallery: newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [newProduct.image],
       dimensions: newProduct.dimensions || '64mm * 43mm',
       material: newProduct.material || 'Biodegradable PLA',
@@ -139,17 +147,42 @@ export const useCartStore = create((set, get) => ({
   },
 
   toggleProductStock: (productId) => {
-    const nextProducts = get().products.map((p) =>
-      p.id === productId ? { ...p, inStock: !p.inStock } : p
-    )
+    let updated = null
+    const nextProducts = get().products.map((p) => {
+      if (p.id === productId) {
+        updated = { ...p, inStock: !p.inStock }
+        return updated
+      }
+      return p
+    })
     set({ products: nextProducts })
     persistProducts(nextProducts)
+    if (updated) {
+      saveProduct(updated).catch((e) => console.warn('Sync stock to db failed', e))
+    }
+  },
+
+  toggleProductVisibility: (productId) => {
+    let updated = null
+    const nextProducts = get().products.map((p) => {
+      if (p.id === productId) {
+        updated = { ...p, isHidden: !p.isHidden }
+        return updated
+      }
+      return p
+    })
+    set({ products: nextProducts })
+    persistProducts(nextProducts)
+    if (updated) {
+      saveProduct(updated).catch((e) => console.warn('Sync visibility to db failed', e))
+    }
   },
 
   resetProductsToDefault: () => {
     const defaults = MOCK_PRODUCTS.map((p) => ({
       ...p,
       inStock: true,
+      isHidden: false,
     }))
     set({ products: defaults })
     persistProducts(defaults)
@@ -213,6 +246,7 @@ export const useCartStore = create((set, get) => ({
   closeCart: () => set({ isOpen: false }),
 
   addItem: (product) => {
+    if (product.inStock === false) return
     const existing = get().items.find((item) => item.id === product.id)
     let nextItems
     if (existing) {

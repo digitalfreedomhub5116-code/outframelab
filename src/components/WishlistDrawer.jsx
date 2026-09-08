@@ -34,6 +34,7 @@ export default function WishlistDrawer() {
   if (!visible) return null
 
   const handleMoveToCart = (product) => {
+    if (product.inStock === false) return
     addItem(product)
     toggleWishlist(product)
     closeWishlist()
@@ -156,10 +157,15 @@ export default function WishlistDrawer() {
                     {/* Move to Cart CTA */}
                     <button
                       onClick={() => handleMoveToCart(item)}
-                      className="btn-gold mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-bold uppercase tracking-wider"
+                      disabled={item.inStock === false}
+                      className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl py-1.5 text-xs font-bold uppercase tracking-wider ${
+                        item.inStock === false
+                          ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                          : 'btn-gold'
+                      }`}
                     >
                       <ShoppingBag className="h-3.5 w-3.5" />
-                      <span>Move to Cart</span>
+                      <span>{item.inStock === false ? 'Out of Stock' : 'Move to Cart'}</span>
                     </button>
                   </div>
                 </div>
@@ -173,8 +179,9 @@ export default function WishlistDrawer() {
           <div className="border-t border-gold/10 px-5 py-4 bg-obsidian/40">
             <button
               onClick={() => {
-                wishlist.forEach((p) => addItem(p))
-                wishlist.forEach((p) => toggleWishlist(p))
+                const inStockItems = wishlist.filter((p) => p.inStock !== false)
+                inStockItems.forEach((p) => addItem(p))
+                inStockItems.forEach((p) => toggleWishlist(p))
                 closeWishlist()
                 openCart()
               }}

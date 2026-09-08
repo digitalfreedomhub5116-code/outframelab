@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   Filter,
   Eye,
+  EyeOff,
   RefreshCw,
   AlertCircle,
   IndianRupee,
@@ -397,6 +398,7 @@ export default function AdminPanelPage() {
   const addProduct = useCartStore((s) => s.addProduct)
   const deleteProduct = useCartStore((s) => s.deleteProduct)
   const toggleProductStock = useCartStore((s) => s.toggleProductStock)
+  const toggleProductVisibility = useCartStore((s) => s.toggleProductVisibility)
   const resetProductsToDefault = useCartStore((s) => s.resetProductsToDefault)
 
   // Orders State
@@ -410,6 +412,7 @@ export default function AdminPanelPage() {
   // Products Tab Local Filters
   const [productSearch, setProductSearch] = useState('')
   const [genreFilter, setGenreFilter] = useState('ALL')
+  const [productStatusFilter, setProductStatusFilter] = useState('ALL') // 'ALL' | 'LIVE' | 'OUT_OF_STOCK' | 'HIDDEN'
 
   // Edit Product Modal State
   const [editingProduct, setEditingProduct] = useState(null)
@@ -425,6 +428,7 @@ export default function AdminPanelPage() {
     image: '',
     gallery: [],
     inStock: true,
+    isHidden: false,
   })
 
   // Settings State
@@ -853,6 +857,8 @@ export default function AdminPanelPage() {
       ...editingProduct,
       price: Number(editingProduct.price),
       originalPrice: Number(editingProduct.originalPrice || Math.round(editingProduct.price * 1.8)),
+      inStock: editingProduct.inStock !== false,
+      isHidden: editingProduct.isHidden === true,
       gallery:
         editingProduct.gallery && editingProduct.gallery.length > 0
           ? editingProduct.gallery
@@ -892,7 +898,8 @@ export default function AdminPanelPage() {
       description: newProduct.description || `Handcrafted antique gold ${newProduct.name} keychain.`,
       image: defaultCover,
       gallery: gallery,
-      inStock: newProduct.inStock,
+      inStock: newProduct.inStock !== false,
+      isHidden: newProduct.isHidden === true,
     }
 
     // Add to global store
@@ -910,6 +917,7 @@ export default function AdminPanelPage() {
       image: '',
       gallery: [],
       inStock: true,
+      isHidden: false,
     })
     showToast(`New product "${productToAdd.name}" is now live worldwide!`)
   }
@@ -957,9 +965,14 @@ export default function AdminPanelPage() {
         prod.fullName?.toLowerCase().includes(productSearch.toLowerCase())
       const matchesGenre =
         genreFilter === 'ALL' || prod.genre === genreFilter
-      return matchesSearch && matchesGenre
+      const matchesStatus =
+        productStatusFilter === 'ALL' ||
+        (productStatusFilter === 'LIVE' && !prod.isHidden && prod.inStock !== false) ||
+        (productStatusFilter === 'OUT_OF_STOCK' && prod.inStock === false) ||
+        (productStatusFilter === 'HIDDEN' && prod.isHidden)
+      return matchesSearch && matchesGenre && matchesStatus
     })
-  }, [products, productSearch, genreFilter])
+  }, [products, productSearch, genreFilter, productStatusFilter])
 
   // ── 100% REAL OVERVIEW METRICS (Strictly derived from live database records) ──
   const validOrders = useMemo(() => {
@@ -2045,35 +2058,62 @@ export default function AdminPanelPage() {
                   )}
                 </div>
 
-                {/* Genre Filter Pills & Factory Reset */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-                  <div className="flex items-center gap-1.5">
-                    {['ALL', 'MARVEL', 'DC', 'ANIME', 'CARS', 'VALORANT'].map((genre) => {
-                      const isActive = genreFilter === genre
+                {/* Product Status Filter Pills & Genre Filters */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {[
+                      { id: 'ALL', label: `All (${products.length})` },
+                      { id: 'LIVE', label: `Live (${products.filter((p) => !p.isHidden && p.inStock !== false).length})` },
+                      { id: 'OUT_OF_STOCK', label: `Out of Stock (${products.filter((p) => p.inStock === false).length})` },
+                      { id: 'HIDDEN', label: `Hidden (${products.filter((p) => p.isHidden).length})` },
+                    ].map((filter) => {
+                      const isActive = productStatusFilter === filter.id
                       return (
                         <button
-                          key={genre}
-                          onClick={() => setGenreFilter(genre)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                          key={filter.id}
+                          onClick={() => setProductStatusFilter(filter.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                             isActive
-                              ? 'bg-gold text-obsidian font-bold shadow-md'
+                              ? 'bg-gold text-obsidian shadow-sm font-bold'
                               : 'bg-charcoal border border-charcoal-light text-cream-muted hover:text-cream hover:border-gold/30'
                           }`}
                         >
-                          {genre}
+                          {filter.label}
                         </button>
                       )
                     })}
                   </div>
 
-                  <button
-                    onClick={handleResetCatalog}
-                    title="Restore default factory catalog"
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-charcoal-light text-[11px] text-cream-muted/60 hover:text-cream hover:border-rose-500/40 hover:bg-rose-500/10 transition-colors whitespace-nowrap cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Reset Defaults</span>
-                  </button>
+                  {/* Genre Filter Pills & Factory Reset */}
+                  <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 md:pb-0">
+                    <div className="flex items-center gap-1.5">
+                      {['ALL', 'MARVEL', 'DC', 'ANIME', 'CARS', 'VALORANT'].map((genre) => {
+                        const isActive = genreFilter === genre
+                        return (
+                          <button
+                            key={genre}
+                            onClick={() => setGenreFilter(genre)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-gold text-obsidian font-bold shadow-md'
+                                : 'bg-charcoal border border-charcoal-light text-cream-muted hover:text-cream hover:border-gold/30'
+                            }`}
+                          >
+                            {genre}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={handleResetCatalog}
+                      title="Restore default factory catalog"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-charcoal-light text-[11px] text-cream-muted/60 hover:text-cream hover:border-rose-500/40 hover:bg-rose-500/10 transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset Defaults</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2089,12 +2129,20 @@ export default function AdminPanelPage() {
                       <img
                         src={prod.image}
                         alt={prod.name}
-                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                        className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${
+                          prod.isHidden ? 'opacity-40 grayscale' : ''
+                        }`}
                       />
-                      <div className="absolute top-2.5 left-2.5">
+                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-obsidian/85 backdrop-blur-md text-gold border border-gold/30">
                           {prod.genre}
                         </span>
+                        {prod.isHidden && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-rose-950/90 backdrop-blur-md text-rose-300 border border-rose-500/50 flex items-center gap-1 shadow-sm">
+                            <EyeOff className="w-2.5 h-2.5 text-rose-400" />
+                            Hidden
+                          </span>
+                        )}
                       </div>
                       <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
                         {prod.gallery && prod.gallery.length > 1 && (
@@ -2110,7 +2158,7 @@ export default function AdminPanelPage() {
                               : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                           }`}
                         >
-                          {prod.inStock !== false ? 'In Stock' : 'Sold Out'}
+                          {prod.inStock !== false ? 'In Stock' : 'Out of Stock'}
                         </span>
                       </div>
                     </div>
@@ -2133,27 +2181,24 @@ export default function AdminPanelPage() {
 
                       {/* Card Action Buttons */}
                       <div className="pt-3 border-t border-charcoal-light space-y-2.5">
-                        {/* Stock toggle & View link */}
-                        <div className="flex items-center justify-between">
-                          <Link
-                            to={`/product/${prod.slug}`}
-                            target="_blank"
-                            className="text-[11px] text-cream-muted/60 hover:text-gold flex items-center gap-1 transition-colors"
-                          >
-                            <Eye className="w-3 h-3" />
-                            <span>Preview</span>
-                          </Link>
-
+                        {/* Row 1: Stock Availability Toggle & Hide Button */}
+                        <div className="flex items-center justify-between gap-2">
+                          {/* Stock Toggle */}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-cream-muted/70">
-                              {prod.inStock !== false ? 'Available' : 'Disabled'}
-                            </span>
                             <button
                               type="button"
-                              onClick={() => toggleProductStock(prod.id)}
+                              onClick={() => {
+                                toggleProductStock(prod.id)
+                                showToast(
+                                  prod.inStock !== false
+                                    ? `"${prod.name}" marked as Out of Stock.`
+                                    : `"${prod.name}" is now Available & In Stock.`
+                                )
+                              }}
                               className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                                 prod.inStock !== false ? 'bg-gold' : 'bg-charcoal-light'
                               }`}
+                              title={prod.inStock !== false ? 'Click to mark Out of Stock' : 'Click to mark Available'}
                             >
                               <span
                                 className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-obsidian shadow ring-0 transition duration-200 ease-in-out ${
@@ -2161,24 +2206,67 @@ export default function AdminPanelPage() {
                                 }`}
                               />
                             </button>
+                            <span className={`text-[10px] font-medium ${prod.inStock !== false ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {prod.inStock !== false ? 'Available' : 'Out of Stock'}
+                            </span>
                           </div>
+
+                          {/* Hide / Unhide Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              toggleProductVisibility(prod.id)
+                              showToast(
+                                prod.isHidden
+                                  ? `"${prod.name}" is now visible on storefront.`
+                                  : `"${prod.name}" is now hidden from storefront.`
+                              )
+                            }}
+                            className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                              prod.isHidden
+                                ? 'bg-rose-500/15 border-rose-500/40 text-rose-400 hover:bg-rose-500/25'
+                                : 'bg-charcoal border-charcoal-light text-cream-muted/80 hover:text-gold hover:border-gold/40'
+                            }`}
+                            title={prod.isHidden ? 'Click to show product on store' : 'Click to hide product from store'}
+                          >
+                            {prod.isHidden ? (
+                              <>
+                                <Eye className="w-3 h-3 text-rose-400" />
+                                <span>Unhide</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3" />
+                                <span>Hide</span>
+                              </>
+                            )}
+                          </button>
                         </div>
 
-                        {/* Edit & Delete Buttons */}
-                        <div className="grid grid-cols-4 gap-2 pt-1">
+                        {/* Row 2: View, Edit & Delete Buttons */}
+                        <div className="grid grid-cols-12 gap-1.5 pt-1">
+                          <Link
+                            to={`/product/${prod.slug}`}
+                            target="_blank"
+                            className="col-span-3 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg border border-charcoal-light text-cream-muted/70 hover:text-gold hover:border-gold/30 text-xs transition-colors"
+                            title="Preview on Store"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </Link>
                           <button
                             type="button"
                             onClick={() => setEditingProduct({ ...prod })}
-                            className="col-span-3 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-gold/15 text-gold border border-gold/30 hover:bg-gold hover:text-obsidian text-xs font-semibold transition-colors cursor-pointer"
+                            className="col-span-7 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-gold/15 text-gold border border-gold/30 hover:bg-gold hover:text-obsidian text-xs font-semibold transition-colors cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                            <span>Edit Details & Photos</span>
+                            <span>Edit</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteProduct(prod)}
                             title="Delete Product"
-                            className="flex items-center justify-center py-1.5 px-2 rounded-lg border border-charcoal-light text-cream-muted hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 text-xs transition-colors cursor-pointer"
+                            className="col-span-2 flex items-center justify-center py-1.5 px-2 rounded-lg border border-charcoal-light text-cream-muted hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 text-xs transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2447,10 +2535,10 @@ export default function AdminPanelPage() {
                       <div className="flex items-center justify-between p-3.5 rounded-lg bg-obsidian border border-charcoal-light">
                         <div>
                           <span className="text-xs font-semibold text-cream block">
-                            Product Active Status
+                            Stock Availability
                           </span>
                           <span className="text-[11px] text-cream-muted/60">
-                            Available for online purchasing across all categories
+                            {editingProduct.inStock !== false ? 'Available for purchase on website' : 'Marked as Out of Stock / Sold Out'}
                           </span>
                         </div>
                         <button
@@ -2468,6 +2556,37 @@ export default function AdminPanelPage() {
                           <span
                             className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow ring-0 transition duration-200 ease-in-out ${
                               editingProduct.inStock !== false ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* 8. Storefront Visibility Toggle */}
+                      <div className="flex items-center justify-between p-3.5 rounded-lg bg-obsidian border border-charcoal-light">
+                        <div>
+                          <span className="text-xs font-semibold text-cream flex items-center gap-1.5">
+                            {editingProduct.isHidden ? <EyeOff className="w-3.5 h-3.5 text-rose-400" /> : <Eye className="w-3.5 h-3.5 text-gold" />}
+                            <span>Storefront Visibility</span>
+                          </span>
+                          <span className="text-[11px] text-cream-muted/60">
+                            {editingProduct.isHidden ? 'Hidden from storefront & public catalog' : 'Visible on store catalog & category pages'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingProduct({
+                              ...editingProduct,
+                              isHidden: !editingProduct.isHidden,
+                            })
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            !editingProduct.isHidden ? 'bg-gold' : 'bg-rose-900/70 border-rose-500/50'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow ring-0 transition duration-200 ease-in-out ${
+                              !editingProduct.isHidden ? 'translate-x-5' : 'translate-x-0'
                             }`}
                           />
                         </button>
@@ -2658,7 +2777,7 @@ export default function AdminPanelPage() {
                             Initial Stock Availability
                           </span>
                           <span className="text-[11px] text-cream-muted/60">
-                            Make immediately purchasable on public store
+                            {newProduct.inStock ? 'Make immediately purchasable on public store' : 'Mark as Out of Stock initially'}
                           </span>
                         </div>
                         <button
@@ -2676,6 +2795,37 @@ export default function AdminPanelPage() {
                           <span
                             className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
                               newProduct.inStock ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Storefront Visibility Toggle */}
+                      <div className="flex items-center justify-between p-3.5 rounded-lg bg-obsidian border border-charcoal-light">
+                        <div>
+                          <span className="text-xs font-semibold text-cream flex items-center gap-1.5">
+                            {newProduct.isHidden ? <EyeOff className="w-3.5 h-3.5 text-rose-400" /> : <Eye className="w-3.5 h-3.5 text-gold" />}
+                            <span>Storefront Visibility</span>
+                          </span>
+                          <span className="text-[11px] text-cream-muted/60">
+                            {newProduct.isHidden ? 'Hidden from public storefront on publish' : 'Publish live to store catalog & categories'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewProduct({
+                              ...newProduct,
+                              isHidden: !newProduct.isHidden,
+                            })
+                          }
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            !newProduct.isHidden ? 'bg-gold' : 'bg-rose-900/70 border-rose-500/50'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              !newProduct.isHidden ? 'translate-x-5' : 'translate-x-0'
                             }`}
                           />
                         </button>
