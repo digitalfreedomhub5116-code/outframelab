@@ -2191,10 +2191,15 @@ export default function AdminPanelPage() {
 
               {/* ── EDIT PRODUCT MODAL (COMPLETE DRAG & DROP & FIELDS) ── */}
               {editingProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-                  <div className="relative w-full max-w-2xl my-8 rounded-2xl bg-charcoal border border-charcoal-light p-6 shadow-2xl animate-fade-in-up">
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-charcoal-light pb-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md overflow-hidden">
+                  {/* Backdrop Click */}
+                  <div
+                    className="fixed inset-0"
+                    onClick={() => setEditingProduct(null)}
+                  />
+                  <div className="relative w-full max-w-2xl max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-2xl bg-charcoal border border-charcoal-light shadow-2xl animate-fade-in-up z-10 overflow-hidden">
+                    {/* Fixed Header */}
+                    <div className="flex items-center justify-between border-b border-charcoal-light px-6 py-4 bg-charcoal shrink-0">
                       <div>
                         <h3 className="font-heading font-bold text-lg text-cream flex items-center gap-2">
                           <Edit3 className="w-5 h-5 text-gold" />
@@ -2205,14 +2210,17 @@ export default function AdminPanelPage() {
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => setEditingProduct(null)}
-                        className="text-cream-muted hover:text-cream p-1 rounded-lg cursor-pointer"
+                        className="text-cream-muted hover:text-cream p-1.5 rounded-lg hover:bg-charcoal-light transition-colors cursor-pointer"
                       >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleSaveEditProduct} className="space-y-5 pt-4">
+                    <form onSubmit={handleSaveEditProduct} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                      {/* Scrollable Form Body */}
+                      <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1 custom-scrollbar">
                       {/* 1. Name & Display Name */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -2465,18 +2473,20 @@ export default function AdminPanelPage() {
                         </button>
                       </div>
 
-                      {/* Actions */}
-                      <div className="pt-4 flex items-center justify-end gap-3 border-t border-charcoal-light">
+                      </div>
+
+                      {/* Sticky Actions Footer */}
+                      <div className="flex items-center justify-end gap-3 border-t border-charcoal-light px-6 py-3.5 bg-charcoal shrink-0">
                         <button
                           type="button"
                           onClick={() => setEditingProduct(null)}
-                          className="px-4 py-2.5 rounded-lg border border-charcoal-light text-xs text-cream-muted hover:text-cream font-medium transition-colors cursor-pointer"
+                          className="px-4 py-2 rounded-lg border border-charcoal-light text-xs text-cream-muted hover:text-cream font-medium transition-colors cursor-pointer"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
-                          className="px-6 py-2.5 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] shadow-[0_0_15px_rgba(207,181,59,0.25)] flex items-center gap-2 cursor-pointer"
+                          className="px-5 py-2 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] shadow-[0_0_15px_rgba(207,181,59,0.25)] flex items-center gap-2 cursor-pointer"
                         >
                           <Globe className="w-4 h-4" />
                           <span>Save & Deploy Globally</span>
@@ -2489,9 +2499,15 @@ export default function AdminPanelPage() {
 
               {/* ── ADD NEW PRODUCT MODAL (WITH DRAG & DROP) ── */}
               {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-                  <div className="relative w-full max-w-2xl my-8 rounded-2xl bg-charcoal border border-charcoal-light p-6 shadow-2xl animate-fade-in-up">
-                    <div className="flex items-center justify-between border-b border-charcoal-light pb-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md overflow-hidden">
+                  {/* Backdrop Click */}
+                  <div
+                    className="fixed inset-0"
+                    onClick={() => setIsAddModalOpen(false)}
+                  />
+                  <div className="relative w-full max-w-2xl max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-2xl bg-charcoal border border-charcoal-light shadow-2xl animate-fade-in-up z-10 overflow-hidden">
+                    {/* Fixed Header */}
+                    <div className="flex items-center justify-between border-b border-charcoal-light px-6 py-4 bg-charcoal shrink-0">
                       <div>
                         <h3 className="font-heading font-bold text-lg text-cream flex items-center gap-2">
                           <Plus className="w-5 h-5 text-gold" />
@@ -2502,14 +2518,17 @@ export default function AdminPanelPage() {
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => setIsAddModalOpen(false)}
-                        className="text-cream-muted hover:text-cream p-1 rounded-lg cursor-pointer"
+                        className="text-cream-muted hover:text-cream p-1.5 rounded-lg hover:bg-charcoal-light transition-colors cursor-pointer"
                       >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
-                    <form onSubmit={handleAddProduct} className="space-y-5 pt-4">
+                    <form onSubmit={handleAddProduct} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                      {/* Scrollable Form Body */}
+                      <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1 custom-scrollbar">
                       {/* Product Title */}
                       <div>
                         <label className="block text-xs font-semibold text-cream-muted mb-1.5">
@@ -2662,18 +2681,20 @@ export default function AdminPanelPage() {
                         </button>
                       </div>
 
-                      {/* Modal Actions */}
-                      <div className="pt-3 flex items-center justify-end gap-3 border-t border-charcoal-light">
+                      </div>
+
+                      {/* Sticky Actions Footer */}
+                      <div className="flex items-center justify-end gap-3 border-t border-charcoal-light px-6 py-3.5 bg-charcoal shrink-0">
                         <button
                           type="button"
                           onClick={() => setIsAddModalOpen(false)}
-                          className="px-4 py-2.5 rounded-lg border border-charcoal-light text-xs text-cream-muted hover:text-cream font-medium transition-colors cursor-pointer"
+                          className="px-4 py-2 rounded-lg border border-charcoal-light text-xs text-cream-muted hover:text-cream font-medium transition-colors cursor-pointer"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
-                          className="px-6 py-2.5 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] shadow-[0_0_15px_rgba(207,181,59,0.2)] flex items-center gap-2 cursor-pointer"
+                          className="px-5 py-2 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] shadow-[0_0_15px_rgba(207,181,59,0.2)] flex items-center gap-2 cursor-pointer"
                         >
                           <Globe className="w-4 h-4" />
                           <span>Publish Globally</span>
