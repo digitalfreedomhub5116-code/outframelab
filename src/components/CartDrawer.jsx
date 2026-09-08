@@ -2,6 +2,8 @@ import { X, Minus, Plus, ShoppingBag } from 'lucide-react'
 import { useCartStore, GENRES } from '../store/cartStore'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getCurrentCustomer, initAuthListener } from '../lib/db'
+import AuthModal from './AuthModal'
 
 function CartItem({ item }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity)
@@ -84,6 +86,22 @@ export default function CartDrawer() {
   const navigate = useNavigate()
   const [animating, setAnimating] = useState(false)
   const [visible, setVisible] = useState(false)
+  const [currentUser, setCurrentUser] = useState(() => getCurrentCustomer())
+  const [isAuthOpen, setIsAuthOpen] = useState(false)
+
+  // Listen for auth changes
+  useEffect(() => {
+    const unsub = initAuthListener((user) => {
+      setCurrentUser(user)
+      // If user just signed in while auth modal is open, auto-proceed to checkout
+      if (user && isAuthOpen) {
+        setIsAuthOpen(false)
+        closeCart()
+        navigate('/checkout')
+      }
+    })
+    return () => unsub && unsub()
+  }, [isAuthOpen])
 
   useEffect(() => {
     if (isOpen) {
@@ -205,12 +223,16 @@ export default function CartDrawer() {
 
             <button
               onClick={() => {
+                if (!currentUser) {
+                  setIsAuthOpen(true)
+                  return
+                }
                 closeCart()
                 navigate('/checkout')
               }}
               className="btn-gold w-full rounded-full py-3.5 text-sm font-bold uppercase tracking-widest cursor-pointer shadow-lg shadow-gold/20 active:scale-98"
             >
-              Proceed to Checkout
+              {currentUser ? 'Proceed to Checkout' : 'Sign In to Checkout'}
             </button>
             <button
               onClick={closeCart}
@@ -221,6 +243,18 @@ export default function CartDrawer() {
           </div>
         )}
       </div>
+
+      {/* Auth Modal — shown when guest tries to checkout */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={(user) => {
+          setCurrentUser(user)
+          setIsAuthOpen(false)
+          closeCart()
+          navigate('/checkout')
+        }}
+      />
     </div>
   )
 }

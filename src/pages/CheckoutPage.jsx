@@ -402,6 +402,164 @@ export default function CheckoutPage() {
     )
   }
 
+  // ── LOGIN REQUIRED GATE ──
+  // If user is not signed in, block checkout and show a full-page sign-in prompt
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
+        {/* Top Bar */}
+        <div className="border-b border-gold/15 bg-charcoal/90 px-4 py-3 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 text-gold hover:text-cream text-xs font-semibold uppercase tracking-wider">
+            <ArrowLeft className="h-4 w-4" />
+            <span>Return to Store</span>
+          </Link>
+          <span className="font-heading text-base font-bold tracking-widest text-cream">OUTFRAME</span>
+          <Link to="/" className="text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-gold">
+            CANCEL
+          </Link>
+        </div>
+
+        <div className="mx-auto max-w-md w-full text-center px-4 py-16 flex-1 flex flex-col items-center justify-center">
+          {/* Icon */}
+          <div className="h-16 w-16 mx-auto rounded-full bg-charcoal flex items-center justify-center border-2 border-gold/30 mb-5">
+            <User className="h-8 w-8 text-gold" />
+          </div>
+
+          <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-cream">Sign in to Continue</h2>
+          <p className="mt-2 text-sm text-cream-muted/70 max-w-xs mx-auto">
+            Create an account or sign in to place your order, save addresses, and track your delivery in real-time.
+          </p>
+
+          {/* Auth Form Card */}
+          <div className="mt-8 w-full rounded-2xl border border-gold/20 bg-charcoal/80 p-6 space-y-5 text-left">
+            {/* Google Sign In */}
+            <button
+              onClick={handleGoogleAuth}
+              disabled={googleLoading}
+              className="w-full flex items-center justify-center gap-3 rounded-xl border border-gold/25 bg-obsidian/80 px-4 py-3.5 text-sm font-bold text-cream hover:border-gold/50 hover:bg-charcoal transition-all cursor-pointer disabled:opacity-50"
+            >
+              {googleLoading ? (
+                <RefreshCw className="h-4 w-4 animate-spin text-gold" />
+              ) : (
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                </svg>
+              )}
+              Continue with Google
+            </button>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-charcoal-light" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-charcoal/80 px-3 text-xs text-cream-muted/50 uppercase tracking-wider">or</span>
+              </div>
+            </div>
+
+            {/* Email Auth */}
+            <form onSubmit={handleEmailAuth} className="space-y-3">
+              {authMode === 'signup' && (
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={authName}
+                  onChange={(e) => setAuthName(e.target.value)}
+                  className="w-full rounded-xl border border-gold/20 bg-obsidian/70 px-4 py-3 text-sm text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/30"
+                />
+              )}
+              <input
+                type="email"
+                placeholder="Email Address"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                className="w-full rounded-xl border border-gold/20 bg-obsidian/70 px-4 py-3 text-sm text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/30"
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password (min 6 characters)"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                className="w-full rounded-xl border border-gold/20 bg-obsidian/70 px-4 py-3 text-sm text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/30"
+                required
+              />
+              {authMode === 'signup' && (
+                <input
+                  type="tel"
+                  placeholder="Phone Number (optional)"
+                  value={authPhone}
+                  onChange={(e) => setAuthPhone(e.target.value)}
+                  className="w-full rounded-xl border border-gold/20 bg-obsidian/70 px-4 py-3 text-sm text-cream placeholder-cream-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold/30"
+                />
+              )}
+
+              {authError && (
+                <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 px-3 py-2 text-xs text-rose-400 flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  {authError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="btn-gold w-full rounded-xl py-3.5 text-sm font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+              >
+                {authLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mx-auto" />
+                ) : authMode === 'signup' ? (
+                  'Create Account & Continue'
+                ) : (
+                  'Sign In & Continue'
+                )}
+              </button>
+            </form>
+
+            {/* Toggle Login/Signup */}
+            <p className="text-center text-xs text-cream-muted/60">
+              {authMode === 'login' ? (
+                <>
+                  Don't have an account?{' '}
+                  <button
+                    onClick={() => { setAuthMode('signup'); setAuthError('') }}
+                    className="text-gold hover:underline font-semibold cursor-pointer"
+                  >
+                    Create One
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{' '}
+                  <button
+                    onClick={() => { setAuthMode('login'); setAuthError('') }}
+                    className="text-gold hover:underline font-semibold cursor-pointer"
+                  >
+                    Sign In
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Security note */}
+          <div className="mt-6 flex items-center justify-center gap-2 text-[11px] text-cream-muted/50">
+            <ShieldCheck className="h-3.5 w-3.5 text-gold/60" />
+            <span>Your data is encrypted and never shared with third parties</span>
+          </div>
+        </div>
+
+        <div className="border-t border-charcoal-light py-4 text-center text-xs text-cream-muted/40">
+          © 2026 Outframe Labs. All rights reserved.
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-obsidian text-cream selection:bg-gold selection:text-obsidian pb-24">
       {/* ═════════════════════════════════════════════════════════════
@@ -550,13 +708,7 @@ export default function CheckoutPage() {
             </div>
             <div className="text-xs min-w-0">
               <p className="font-semibold text-cream truncate">
-                {currentUser ? (
-                  <>
-                    Signed in as <span className="text-gold">{currentUser.name || currentUser.email}</span>
-                  </>
-                ) : (
-                  'Guest Checkout (Addresses saved locally)'
-                )}
+                Signed in as <span className="text-gold">{currentUser.name || currentUser.email}</span>
               </p>
               {currentUser?.email && (
                 <p className="text-[10px] text-cream-muted/60 truncate">{currentUser.email}</p>
@@ -565,21 +717,12 @@ export default function CheckoutPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {currentUser ? (
-              <button
-                onClick={handleLogout}
-                className="text-[11px] text-cream-muted hover:text-gold underline cursor-pointer"
-              >
-                Switch
-              </button>
-            ) : (
-              <button
-                onClick={() => setIsAuthFormOpen(true)}
-                className="text-[11px] font-semibold text-gold hover:text-cream border border-gold/30 rounded-lg px-2.5 py-1 transition-colors cursor-pointer"
-              >
-                Sign In
-              </button>
-            )}
+            <button
+              onClick={handleLogout}
+              className="text-[11px] text-cream-muted hover:text-gold underline cursor-pointer"
+            >
+              Switch
+            </button>
           </div>
         </div>
 
