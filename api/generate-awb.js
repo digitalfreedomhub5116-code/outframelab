@@ -103,10 +103,22 @@ export default async function handler(req, res) {
     return res.end()
   }
 
+  if (req.method === 'GET') {
+    const hasToken = Boolean(
+      (process.env.SHIPROCKET_TOKEN && process.env.SHIPROCKET_TOKEN !== 'your_shiprocket_bearer_token_here') ||
+      (process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD)
+    )
+    return sendJson(res, 200, {
+      success: true,
+      connected: hasToken,
+      pickup_location: process.env.PICKUP_LOCATION_ID || process.env.SHIPROCKET_PICKUP_LOCATION || 'Home',
+    })
+  }
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, {
       success: false,
-      error: `Method ${req.method} Not Allowed. Expected POST.`,
+      error: `Method ${req.method} Not Allowed. Expected POST or GET.`,
     })
   }
 
@@ -251,7 +263,7 @@ export default async function handler(req, res) {
     const pickupLocationId =
       process.env.PICKUP_LOCATION_ID ||
       process.env.SHIPROCKET_PICKUP_LOCATION ||
-      'Primary'
+      'Home'
 
     const orderNumber = order.order_number || `OFL-${order.id}`
     const paymentMethod = (order.payment_method || '').toUpperCase() === 'COD' ? 'COD' : 'Prepaid'
@@ -283,40 +295,12 @@ export default async function handler(req, res) {
       weight: 0.1,
     }
 
-    // ── If SHIPROCKET_TOKEN is not configured or in sandbox simulation mode ──
+    // ── Require valid Shiprocket credentials ──
     if (!shiprocketToken) {
-      console.warn(
-        'SHIPROCKET_TOKEN is not set in environment. Generating simulated sandbox AWB for testing.'
-      )
-      const simulatedAwb = 'DL-MH-' + Math.floor(100000000 + Math.random() * 900000000)
-      const simulatedShipmentId = String(Math.floor(10000000 + Math.random() * 90000000))
-      const trackingUrl = `https://shiprocket.co/tracking/${simulatedAwb}`
-      const labelUrl = `https://shiprocket.co/manifest/label_${simulatedShipmentId}.pdf`
-      const courierPartner = 'Delhivery Air (Shiprocket)'
-
-      // Update Database
-      await updateDatabaseWithAwb({
-        supabase,
-        order,
-        shiprocketOrderId: 'SR-SIM-' + orderNumber,
-        shipmentId: simulatedShipmentId,
-        courierPartner,
-        awbCode: simulatedAwb,
-        trackingUrl,
-      })
-
-      return sendJson(res, 200, {
-        success: true,
-        simulated: true,
-        order_id: orderNumber,
-        shipment_id: simulatedShipmentId,
-        awb_code: simulatedAwb,
-        courier_name: courierPartner,
-        tracking_url: trackingUrl,
-        label_url: labelUrl,
-        status: 'Shipped',
-        message:
-          'AWB generated in sandbox test mode (add SHIPROCKET_TOKEN to .env for live API production).',
+      return sendJson(res, 400, {
+        success: false,
+        error:
+          'Shiprocket is not connected: Missing SHIPROCKET_TOKEN or SHIPROCKET_EMAIL & SHIPROCKET_PASSWORD in Vercel. Please add your credentials in Vercel Settings -> Environment Variables so this order can be pushed to your Shiprocket account and generate a valid shipping label.',
       })
     }
 

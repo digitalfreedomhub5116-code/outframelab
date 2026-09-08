@@ -552,6 +552,21 @@ export default function AdminPanelPage() {
     autoGenerateAwb: true,
   })
 
+  // Live Shiprocket API connection status
+  const [shiprocketConnected, setShiprocketConnected] = useState(null)
+  useEffect(() => {
+    fetch('/api/generate-awb')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.connected === 'boolean') {
+          setShiprocketConnected(data.connected)
+        } else {
+          setShiprocketConnected(false)
+        }
+      })
+      .catch(() => setShiprocketConnected(false))
+  }, [])
+
   // Load orders from Supabase + LocalStorage fallback
   useEffect(() => {
     let isMounted = true
@@ -995,8 +1010,18 @@ export default function AdminPanelPage() {
 
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-charcoal border border-charcoal-light text-xs text-cream-muted">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Shiprocket API: Connected</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  shiprocketConnected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                }`}
+              />
+              <span>
+                {shiprocketConnected === null
+                  ? 'Checking Shiprocket...'
+                  : shiprocketConnected
+                  ? 'Shiprocket API: Connected'
+                  : 'Shiprocket: Credentials Needed'}
+              </span>
             </div>
 
             {activeTab === 'products' && (
