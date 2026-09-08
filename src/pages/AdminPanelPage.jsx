@@ -532,7 +532,9 @@ export default function AdminPanelPage() {
         } else {
           const mapped = data.map((o) => {
             let st = o.status
-            if (st === 'PLACED' || st === 'CONFIRMED') st = 'Payment Received'
+            if (st === 'PLACED' || st === 'CONFIRMED') {
+              st = (o.payment_method === 'COD') ? 'COD' : 'Online Payment'
+            }
             else if (st === 'PRINTING') st = 'Printing on Kobra 2 Neo'
             else if (st === 'PACKED') st = 'Packed'
             else if (st === 'SHIPPED' || st === 'IN_TRANSIT' || st === 'DELIVERED') st = 'Shipped'
@@ -560,7 +562,8 @@ export default function AdminPanelPage() {
               },
               items: o.order_items || o.items || [{ name: 'Outframed Antique Gold Keychain', quantity: 1, price: o.total_amount || 249 }],
               total_amount: o.total_amount || 249,
-              status: st || 'Payment Received',
+              payment_method: o.payment_method || 'PREPAID',
+              status: st || 'Online Payment',
               awb_code: shipmentObj?.awb_code || o.awb_code || null,
               courier_partner: shipmentObj?.courier_partner || o.courier_partner || null,
               tracking_url: shipmentObj?.tracking_url || (shipmentObj?.awb_code ? `https://shiprocket.co/tracking/${shipmentObj.awb_code}` : null),
@@ -747,7 +750,9 @@ export default function AdminPanelPage() {
       if (freshData && freshData.length > 0) {
         const mapped = freshData.map((o) => {
           let st = o.status
-          if (st === 'PLACED' || st === 'CONFIRMED') st = 'Payment Received'
+            if (st === 'PLACED' || st === 'CONFIRMED') {
+              st = (o.payment_method === 'COD') ? 'COD' : 'Online Payment'
+            }
           else if (st === 'PRINTING') st = 'Printing on Kobra 2 Neo'
           else if (st === 'PACKED') st = 'Packed'
           else if (st === 'SHIPPED' || st === 'IN_TRANSIT' || st === 'DELIVERED') st = 'Shipped'
@@ -774,7 +779,8 @@ export default function AdminPanelPage() {
             },
             items: o.order_items || o.items || [{ name: 'Outframed Antique Gold Keychain', quantity: 1, price: o.total_amount || 249 }],
             total_amount: o.total_amount || 249,
-            status: st || 'Payment Received',
+            payment_method: o.payment_method || 'PREPAID',
+            status: st || 'Online Payment',
             awb_code: shipmentObj?.awb_code || o.awb_code || null,
             courier_partner: shipmentObj?.courier_partner || o.courier_partner || null,
             tracking_url: shipmentObj?.tracking_url || (shipmentObj?.awb_code ? `https://shiprocket.co/tracking/${shipmentObj.awb_code}` : null),
@@ -822,7 +828,7 @@ export default function AdminPanelPage() {
         (o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId
       )
       let dbStatus = newStatus
-      if (newStatus === 'Payment Received') dbStatus = 'CONFIRMED'
+      if (newStatus === 'Online Payment' || newStatus === 'COD') dbStatus = 'CONFIRMED'
       else if (newStatus === 'Printing on Kobra 2 Neo') dbStatus = 'PRINTING'
       else if (newStatus === 'Packed') dbStatus = 'PACKED'
       else if (newStatus === 'Shipped') dbStatus = 'SHIPPED'
@@ -1076,7 +1082,8 @@ export default function AdminPanelPage() {
     return orders.filter(
       (o) =>
         o.status === 'Printing on Kobra 2 Neo' ||
-        o.status === 'Payment Received' ||
+        o.status === 'Online Payment' ||
+        o.status === 'COD' ||
         o.status === 'CONFIRMED' ||
         o.status === 'PLACED' ||
         o.status === 'PACKED'
@@ -1196,8 +1203,10 @@ export default function AdminPanelPage() {
   // Status Badge Colors
   const getStatusBadgeStyle = (st) => {
     switch (st) {
-      case 'Payment Received':
-        return 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+      case 'Online Payment':
+        return 'bg-teal-500/10 text-teal-400 border-teal-500/30'
+      case 'COD':
+        return 'bg-orange-500/10 text-orange-400 border-orange-500/30'
       case 'Printing on Kobra 2 Neo':
         return 'bg-amber-500/10 text-amber-300 border-amber-500/30 animate-pulse'
       case 'Packed':
@@ -1881,7 +1890,7 @@ export default function AdminPanelPage() {
                 {/* Status Filter Tabs & Shiprocket Sync Button */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
                   <div className="flex items-center gap-1.5">
-                    {['ALL', 'Payment Received', 'Printing on Kobra 2 Neo', 'Packed', 'Shipped', 'CANCELLED'].map(
+                    {['ALL', 'Online Payment', 'COD', 'Printing on Kobra 2 Neo', 'Packed', 'Shipped', 'CANCELLED'].map(
                       (st) => {
                         const isActive = statusFilter === st
                         const count = st === 'ALL' ? orders.length : orders.filter((o) => o.status === st).length
@@ -2038,10 +2047,16 @@ export default function AdminPanelPage() {
                                   )}`}
                                 >
                                   <option
-                                    value="Payment Received"
+                                    value="Online Payment"
                                     className="bg-charcoal text-cream"
                                   >
-                                    Payment Received
+                                    Online Payment
+                                  </option>
+                                  <option
+                                    value="COD"
+                                    className="bg-charcoal text-cream"
+                                  >
+                                    COD
                                   </option>
                                   <option
                                     value="Printing on Kobra 2 Neo"
