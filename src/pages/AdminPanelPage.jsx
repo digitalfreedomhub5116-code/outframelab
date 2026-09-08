@@ -41,9 +41,67 @@ import {
   XCircle,
   Lock
 } from 'lucide-react'
-import { GENRES } from '../data/productsData'
+import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
 import { saveProduct, getAllOrders, updateOrderStatus, deleteOrder } from '../lib/db'
+
+// Helper to resolve clean, authentic product name, high-res image, and quantity for order items
+function resolveOrderItems(rawOrder, catalogProducts = []) {
+  const pool = catalogProducts && catalogProducts.length > 0 ? catalogProducts : MOCK_PRODUCTS
+
+  const rawList = (Array.isArray(rawOrder.order_items) && rawOrder.order_items.length > 0)
+    ? rawOrder.order_items
+    : (Array.isArray(rawOrder.items) && rawOrder.items.length > 0)
+    ? rawOrder.items
+    : []
+
+  if (rawList.length === 0) {
+    return [
+      {
+        name: 'Outframed Antique Gold Keychain',
+        product_name: 'Outframed Antique Gold Keychain',
+        quantity: 1,
+        price: rawOrder.total_amount || 249,
+        image: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80',
+      },
+    ]
+  }
+
+  return rawList.map((item) => {
+    const rawName = (item.name || item.product_name || '').trim()
+    const pId = item.product_id || item.id
+
+    // Match with catalog to get proper product name and image
+    const matched = pool?.find(
+      (p) =>
+        (pId && String(p.id) === String(pId)) ||
+        (rawName && p.name && (p.name.toLowerCase() === rawName.toLowerCase() || rawName.toLowerCase().startsWith(p.name.toLowerCase())))
+    )
+
+    let properName = rawName
+    if (!properName && matched) {
+      properName = matched.fullName || `${matched.name} Outframed Keychain`
+    } else if (properName && !properName.toLowerCase().includes('keychain') && !properName.toLowerCase().includes('outframe')) {
+      properName = `${properName} Outframed Keychain`
+    }
+    if (!properName) {
+      properName = 'Outframed Antique Gold Keychain'
+    }
+
+    const properImage = item.image || matched?.image || matched?.gallery?.[0] || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
+    return {
+      ...item,
+      id: pId || matched?.id,
+      product_id: pId || matched?.id,
+      name: properName,
+      product_name: properName,
+      quantity: Number(item.quantity) || 1,
+      price: Number(item.price) || matched?.price || 249,
+      image: properImage,
+    }
+  })
+}
 
 
 
@@ -560,7 +618,7 @@ export default function AdminPanelPage() {
                 state: 'Maharashtra',
                 pincode: '400001',
               },
-              items: o.order_items || o.items || [{ name: 'Outframed Antique Gold Keychain', quantity: 1, price: o.total_amount || 249 }],
+              items: resolveOrderItems(o, products),
               total_amount: o.total_amount || 249,
               payment_method: o.payment_method || 'PREPAID',
               status: st || 'Online Payment',
@@ -777,7 +835,7 @@ export default function AdminPanelPage() {
               state: 'Maharashtra',
               pincode: '400001',
             },
-            items: o.order_items || o.items || [{ name: 'Outframed Antique Gold Keychain', quantity: 1, price: o.total_amount || 249 }],
+            items: resolveOrderItems(o, products),
             total_amount: o.total_amount || 249,
             payment_method: o.payment_method || 'PREPAID',
             status: st || 'Online Payment',
@@ -2017,20 +2075,64 @@ export default function AdminPanelPage() {
 
                             {/* Items Ordered */}
                             <td className="px-5 py-4 align-top">
-                              <div className="space-y-1.5 max-w-xs">
-                                {order.items.map((item, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex items-center justify-between text-xs bg-obsidian/40 px-2 py-1 rounded border border-charcoal-light/60"
-                                  >
-                                    <span className="truncate max-w-[170px] text-cream">
-                                      {item.name}
-                                    </span>
-                                    <span className="font-mono text-gold font-bold ml-2 shrink-0">
-                                      ×{item.quantity || 1}
-                                    </span>
-                                  </div>
-                                ))}
+                              <div className="space-y-2 min-w-[210px] max-w-[260px]">
+                                {order.items.map((item, idx) => {
+                                  const displayName =
+                                    item.name ||
+                                    item.product_name ||
+                                    'Outframed Antique Gold Keychain'
+                                  const displayImg =
+                                    item.image ||
+                                    'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+                                  const qty = item.quantity || 1
+                                  const price = item.price ? `₹${item.price}` : null
+
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center gap-2.5 p-1.5 rounded-xl bg-obsidian/60 border border-charcoal-light/80 hover:border-gold/30 transition-all shadow-sm group"
+                                    >
+                                      {/* Square Product Image Thumbnail */}
+                                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-gold/30 bg-charcoal shrink-0 flex items-center justify-center relative shadow-sm">
+                                        {displayImg ? (
+                                          <img
+                                            src={displayImg}
+                                            alt={displayName}
+                                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-110"
+                                            onError={(e) => {
+                                              e.target.style.display = 'none'
+                                            }}
+                                          />
+                                        ) : (
+                                          <Package className="w-4 h-4 text-gold/60" />
+                                        )}
+                                      </div>
+
+                                      {/* Product Name & Details */}
+                                      <div className="flex-1 min-w-0">
+                                        <p
+                                          className="text-xs font-bold text-cream truncate leading-snug tracking-tight"
+                                          title={displayName}
+                                        >
+                                          {displayName}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px]">
+                                          <span className="inline-flex items-center font-mono font-bold text-gold bg-gold/15 border border-gold/30 px-1.5 py-0.2 rounded text-[10px] leading-none">
+                                            ×{qty}
+                                          </span>
+                                          {price && (
+                                            <span className="font-mono text-cream-muted/80 text-[11px]">
+                                              {price}
+                                            </span>
+                                          )}
+                                          <span className="text-[10px] text-cream-muted/40 font-medium">
+                                            · Antique Gold
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </td>
 
