@@ -88,82 +88,116 @@ export default function ProductPage() {
   const reviewsSectionRef = useRef(null)
   const lastScrollY = useRef(0)
 
-  // Touch and drag swipe state
-  const touchStartX = useRef(0)
-  const touchStartY = useRef(0)
-  const touchEndX = useRef(0)
-  const touchEndY = useRef(0)
-  const isSwiping = useRef(false)
+  // Slider Ref & Interaction State
+  const sliderRef = useRef(null)
+  const isMouseDown = useRef(false)
+  const mouseStartX = useRef(0)
+  const scrollLeftStart = useRef(0)
+  const hasMovedMouse = useRef(false)
+  const isProgrammaticScroll = useRef(false)
+  const programmaticScrollTimer = useRef(null)
+
+  // Smoothly scroll to a specific image index
+  const scrollToIndex = (index) => {
+    const el = sliderRef.current
+    if (!el) return
+    const bounded = Math.max(0, Math.min(gallery.length - 1, index))
+    setActiveImageIndex(bounded)
+    isProgrammaticScroll.current = true
+    if (programmaticScrollTimer.current) {
+      clearTimeout(programmaticScrollTimer.current)
+    }
+    el.scrollTo({
+      left: bounded * el.clientWidth,
+      behavior: 'smooth',
+    })
+    programmaticScrollTimer.current = setTimeout(() => {
+      isProgrammaticScroll.current = false
+    }, 450)
+  }
 
   const handleNextImage = () => {
     if (!gallery.length) return
-    setActiveImageIndex((prev) => (prev + 1) % gallery.length)
+    const nextIndex = (activeImageIndex + 1) % gallery.length
+    scrollToIndex(nextIndex)
   }
 
   const handlePrevImage = () => {
     if (!gallery.length) return
-    setActiveImageIndex((prev) => (prev - 1 + gallery.length) % gallery.length)
+    const prevIndex = (activeImageIndex - 1 + gallery.length) % gallery.length
+    scrollToIndex(prevIndex)
   }
 
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX
-    touchStartY.current = e.touches[0].clientY
-    touchEndX.current = e.touches[0].clientX
-    touchEndY.current = e.touches[0].clientY
-    isSwiping.current = true
-  }
-
-  const handleTouchMove = (e) => {
-    if (!isSwiping.current) return
-    touchEndX.current = e.touches[0].clientX
-    touchEndY.current = e.touches[0].clientY
-  }
-
-  const handleTouchEnd = () => {
-    if (!isSwiping.current) return
-    isSwiping.current = false
-    const diffX = touchStartX.current - touchEndX.current
-    const diffY = touchStartY.current - touchEndY.current
-    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX > 0) {
-        handleNextImage()
-      } else {
-        handlePrevImage()
-      }
+  // Native scroll listener: updates active indicator and thumbnails as user swipes
+  const handleSliderScroll = () => {
+    if (isProgrammaticScroll.current) return
+    const el = sliderRef.current
+    if (!el || el.clientWidth === 0) return
+    const index = Math.round(el.scrollLeft / el.clientWidth)
+    if (index !== activeImageIndex && index >= 0 && index < gallery.length) {
+      setActiveImageIndex(index)
     }
   }
 
+  // Desktop mouse dragging support
   const handleMouseDown = (e) => {
-    touchStartX.current = e.clientX
-    touchStartY.current = e.clientY
-    touchEndX.current = e.clientX
-    touchEndY.current = e.clientY
-    isSwiping.current = true
+    const el = sliderRef.current
+    if (!el) return
+    isMouseDown.current = true
+    hasMovedMouse.current = false
+    mouseStartX.current = e.pageX - el.offsetLeft
+    scrollLeftStart.current = el.scrollLeft
+    el.style.scrollSnapType = 'none'
+    el.style.scrollBehavior = 'auto'
   }
 
   const handleMouseMove = (e) => {
-    if (!isSwiping.current) return
-    touchEndX.current = e.clientX
-    touchEndY.current = e.clientY
+    if (!isMouseDown.current) return
+    const el = sliderRef.current
+    if (!el) return
+    e.preventDefault()
+    const x = e.pageX - el.offsetLeft
+    const walk = x - mouseStartX.current
+    if (Math.abs(walk) > 4) {
+      hasMovedMouse.current = true
+    }
+    el.scrollLeft = scrollLeftStart.current - walk
   }
 
-  const handleMouseUp = () => {
-    if (!isSwiping.current) return
-    isSwiping.current = false
-    const diffX = touchStartX.current - touchEndX.current
-    const diffY = touchStartY.current - touchEndY.current
-    if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX > 0) {
-        handleNextImage()
-      } else {
-        handlePrevImage()
-      }
+  const handleMouseUpOrLeave = () => {
+    if (!isMouseDown.current) return
+    isMouseDown.current = false
+    const el = sliderRef.current
+    if (!el) return
+    el.style.scrollSnapType = 'x mandatory'
+    el.style.scrollBehavior = 'smooth'
+    if (hasMovedMouse.current) {
+      const index = Math.round(el.scrollLeft / el.clientWidth)
+      const bounded = Math.max(0, Math.min(gallery.length - 1, index))
+      scrollToIndex(bounded)
     }
   }
+
+  // Keep carousel aligned on screen resize
+  useEffect(() => {
+    const handleResize = () => {
+      const el = sliderRef.current
+      if (!el || el.clientWidth === 0) return
+      el.scrollTo({
+        left: activeImageIndex * el.clientWidth,
+        behavior: 'instant',
+      })
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [activeImageIndex])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
     setActiveImageIndex(0)
+    if (sliderRef.current) {
+      sliderRef.current.scrollTo({ left: 0, behavior: 'instant' })
+    }
     setShowAllReviews(false)
     setShowNavbar(true)
     lastScrollY.current = 0
@@ -347,10 +381,10 @@ export default function ProductPage() {
                 return (
                   <button
                     key={index}
-                    onClick={() => setActiveImageIndex(index)}
+                    onClick={() => scrollToIndex(index)}
                     className={`h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all duration-200 bg-charcoal ${
                       isSelected
-                        ? 'border-gold shadow-md shadow-gold/30 scale-105'
+                        ? 'border-gold shadow-md shadow-gold/30 scale-105 ring-2 ring-gold/40'
                         : 'border-charcoal-light/70 hover:border-gold/50 opacity-70 hover:opacity-100'
                     }`}
                   >
@@ -364,24 +398,29 @@ export default function ProductPage() {
               })}
             </div>
 
-            {/* Main Image Display Carousel (Swipeable left/right on touch & mouse drag) */}
+            {/* Main Image Display Carousel */}
             <div
-              className="relative flex-1 aspect-[4/5] sm:aspect-square rounded-2xl overflow-hidden border border-charcoal-light/80 bg-charcoal shadow-2xl shadow-black/80 group touch-pan-y select-none cursor-grab active:cursor-grabbing"
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
+              className="relative flex-1 aspect-[4/5] sm:aspect-square rounded-2xl overflow-hidden border border-charcoal-light/80 bg-charcoal shadow-2xl shadow-black/80 group select-none"
             >
-              {/* Sliding Image Track */}
+              {/* Native Snap Scrollable Track (Fluid swipe, 100% immune to getting stuck in between) */}
               <div
-                className="flex h-full w-full transition-transform duration-300 ease-out"
-                style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
+                ref={sliderRef}
+                onScroll={handleSliderScroll}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUpOrLeave}
+                onMouseLeave={handleMouseUpOrLeave}
+                className="flex h-full w-full overflow-x-auto snap-x snap-mandatory scrollbar-none overscroll-x-contain cursor-grab active:cursor-grabbing"
+                style={{
+                  scrollBehavior: 'smooth',
+                  WebkitOverflowScrolling: 'touch',
+                }}
               >
                 {gallery.map((imgUrl, index) => (
-                  <div key={index} className="min-w-full h-full flex-shrink-0 relative">
+                  <div
+                    key={index}
+                    className="w-full min-w-full h-full flex-shrink-0 snap-start snap-always relative"
+                  >
                     <img
                       src={imgUrl}
                       alt={`${product.fullName} view ${index + 1}`}
@@ -481,7 +520,7 @@ export default function ProductPage() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setActiveImageIndex(i)
+                      scrollToIndex(i)
                     }}
                     className={`h-1.5 rounded-full transition-all duration-300 ${
                       activeImageIndex === i ? 'w-5 bg-gold' : 'w-1.5 bg-cream-muted/40 hover:bg-cream'
