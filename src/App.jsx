@@ -39,21 +39,13 @@ export default function App() {
     return () => unsub && unsub()
   }, [])
 
-  // Re-open checkout if customer returned from Google OAuth redirect
-  useEffect(() => {
-    if (sessionStorage.getItem('outframe_checkout_pending') === 'true') {
-      sessionStorage.removeItem('outframe_checkout_pending')
-      if (window.location.pathname !== '/checkout') {
-        window.location.href = '/checkout'
-      }
-    }
-  }, [])
 
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/cart" element={<Navigate to="/checkout" replace />} />
         <Route path="/order-confirmed" element={<OrderConfirmedPage />} />
         <Route path="/track-order" element={<OrderTrackingPage />} />
         <Route path="/track-order/:orderId" element={<OrderTrackingPage />} />

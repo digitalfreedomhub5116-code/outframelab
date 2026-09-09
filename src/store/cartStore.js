@@ -309,9 +309,6 @@ export const useCartStore = create((set, get) => ({
     saveCartToAccount([])
   },
   isOpen: false,
-  isCheckoutOpen: false,
-  openCheckout: () => set({ isCheckoutOpen: true }),
-  closeCheckout: () => set({ isCheckoutOpen: false }),
   activeReviewProduct: null, // Product whose reviews modal is currently open
 
   // ── Wishlist State ──

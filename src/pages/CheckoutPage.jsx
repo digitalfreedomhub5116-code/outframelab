@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Check,
   Plus,
+  Minus,
   Edit2,
   Trash2,
   MapPin,
@@ -16,6 +17,7 @@ import {
   ShoppingBag,
   FileText,
   ChevronRight,
+  ChevronDown,
   AlertCircle
 } from 'lucide-react'
 import { useCartStore } from '../store/cartStore'
@@ -37,6 +39,8 @@ export default function CheckoutPage() {
   const items = useCartStore((s) => s.items)
   const getTotal = useCartStore((s) => s.getTotal)
   const closeCart = useCartStore((s) => s.closeCart)
+  const updateQuantity = useCartStore((s) => s.updateQuantity)
+  const removeItem = useCartStore((s) => s.removeItem)
 
   // Stepper: 1: 'address', 2: 'payment', 3: 'confirm'
   const [currentStep, setCurrentStepState] = useState(() => {
@@ -128,6 +132,12 @@ export default function CheckoutPage() {
   const subtotal = typeof getTotal === 'function' ? getTotal() : 0
   const shippingFee = 60
   const totalAmount = subtotal + shippingFee
+  const originalTotal = items.reduce(
+    (sum, item) => sum + (item.originalPrice || 459) * item.quantity,
+    0
+  )
+  const totalSavings = Math.max(0, originalTotal - subtotal)
+  const [showMobileSummary, setShowMobileSummary] = useState(false)
 
   // Auth listener
   useEffect(() => {
@@ -616,7 +626,7 @@ export default function CheckoutPage() {
           TOP BAR: BACK ARROW + BRAND + "CANCEL"
       ═════════════════════════════════════════════════════════════ */}
       <header className="sticky top-0 z-40 border-b border-gold/20 bg-obsidian/95 backdrop-blur-md">
-        <div className="mx-auto max-w-2xl px-4 sm:px-6">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex h-14 items-center justify-between">
             {/* Back button */}
             <button
@@ -768,8 +778,126 @@ export default function CheckoutPage() {
       </header>
 
       {/* Main Container */}
-      <main className="mx-auto max-w-2xl px-4 sm:px-6 pt-6">
-        {/* User Status Bar */}
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-6">
+        {/* Mobile Collapsible Order Summary Bar */}
+        <div className="lg:hidden mb-6 rounded-2xl border border-gold/25 bg-charcoal/90 overflow-hidden shadow-lg shadow-black/40">
+          <button
+            type="button"
+            onClick={() => setShowMobileSummary((prev) => !prev)}
+            className="w-full flex items-center justify-between p-4 bg-obsidian/70 cursor-pointer hover:bg-obsidian transition-colors"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center text-gold">
+                <ShoppingBag className="h-4 w-4" />
+              </div>
+              <div className="text-left">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-cream">
+                  <span>{showMobileSummary ? 'Hide' : 'Show'} Order Summary</span>
+                  <span className="text-gold font-normal">
+                    ({items.reduce((sum, it) => sum + it.quantity, 0)} {items.length === 1 ? 'item' : 'items'})
+                  </span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 text-gold transition-transform duration-200 ${
+                      showMobileSummary ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+                <span className="text-[10px] text-cream-muted/60">Pan-India express dispatch</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="font-heading text-base font-extrabold text-gold">
+                ₹{totalAmount}
+              </span>
+            </div>
+          </button>
+
+          {showMobileSummary && (
+            <div className="p-4 border-t border-charcoal-light/70 space-y-4 animate-fade-in">
+              {/* Items List */}
+              <div className="divide-y divide-charcoal-light/50 max-h-64 overflow-y-auto pr-1">
+                {items.map((item) => (
+                  <div key={item.id} className="py-3 flex items-center gap-3">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-heading text-xs font-bold text-cream truncate">
+                        {item.name} Outframed Keychain
+                      </h4>
+                      <p className="text-[11px] text-gold font-semibold">₹{item.price}</p>
+                      {/* Quantity Controls */}
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 rounded-full border border-charcoal-light bg-obsidian px-2 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            className="text-cream-muted hover:text-gold"
+                            title="Decrease"
+                          >
+                            <Minus className="h-2.5 w-2.5" />
+                          </button>
+                          <span className="text-xs font-bold text-cream min-w-[1rem] text-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            className="text-cream-muted hover:text-gold"
+                            title="Increase"
+                          >
+                            <Plus className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-heading text-xs font-bold text-gold">
+                        ₹{item.price * item.quantity}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Breakdown */}
+              <div className="pt-3 border-t border-charcoal-light/70 space-y-2 text-xs">
+                <div className="flex justify-between text-cream-muted">
+                  <span>Subtotal</span>
+                  <span className="text-cream font-semibold">₹{subtotal}</span>
+                </div>
+                <div className="flex justify-between text-cream-muted">
+                  <span>Pan-India Shipping</span>
+                  <span className="text-cream font-semibold">₹{shippingFee}</span>
+                </div>
+                {totalSavings > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <span>Total Discount Savings</span>
+                    <span>Save ₹{totalSavings}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-charcoal-light/70 flex justify-between items-baseline">
+                  <span className="font-bold text-cream">Total Amount</span>
+                  <span className="font-heading text-lg font-bold text-gold">₹{totalAmount}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Stepper & Step Content */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* User Status Bar */}
         <div className="mb-6 rounded-xl border border-gold/15 bg-charcoal/70 p-3 flex items-center justify-between backdrop-blur-sm">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-7 w-7 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center text-gold text-xs font-bold shrink-0">
@@ -1709,6 +1837,132 @@ export default function CheckoutPage() {
             </div>
           </div>
         )}
+          </div>
+
+          {/* Right Column: Sticky Desktop Order Summary & Cart Review */}
+          <aside className="hidden lg:block lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+            <div className="rounded-2xl border border-gold/25 bg-charcoal/80 backdrop-blur-md p-5 shadow-2xl shadow-black/60">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3.5 border-b border-gold/15">
+                <div className="flex items-center gap-2.5">
+                  <ShoppingBag className="h-5 w-5 text-gold" />
+                  <h3 className="font-heading text-base font-bold text-cream">
+                    Order Summary
+                  </h3>
+                </div>
+                <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-bold text-gold border border-gold/20">
+                  {items.reduce((sum, it) => sum + it.quantity, 0)} {items.length === 1 ? 'item' : 'items'}
+                </span>
+              </div>
+
+              {/* Items List */}
+              <div className="divide-y divide-charcoal-light/60 my-4 max-h-80 overflow-y-auto pr-1">
+                {items.map((item) => (
+                  <div key={item.id} className="py-3 flex items-start gap-3">
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="h-16 w-16 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-heading text-xs font-bold text-cream leading-snug truncate">
+                        {item.name}
+                      </h4>
+                      <p className="text-[10px] uppercase font-bold text-gold tracking-wider mt-0.5">
+                        Antique Gold 3D Printed
+                      </p>
+                      <div className="mt-2 flex items-center justify-between">
+                        {/* Quantity Controls */}
+                        <div className="flex items-center gap-1.5 rounded-full border border-charcoal-light bg-obsidian px-2 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            className="text-cream-muted hover:text-gold transition-colors p-0.5"
+                            title="Decrease quantity"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="text-xs font-bold text-cream min-w-[1rem] text-center">
+                            {item.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            className="text-cream-muted hover:text-gold transition-colors p-0.5"
+                            title="Increase quantity"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="text-cream-muted/50 hover:text-rose-400 p-1 transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-heading text-sm font-bold text-gold block">
+                        ₹{item.price * item.quantity}
+                      </span>
+                      <span className="text-[10px] text-cream-muted/40 line-through">
+                        ₹{(item.originalPrice || 459) * item.quantity}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Price Breakdown */}
+              <div className="border-t border-charcoal-light/80 pt-3.5 space-y-2 text-xs">
+                <div className="flex justify-between text-cream-muted">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-cream">₹{subtotal}</span>
+                </div>
+                <div className="flex justify-between text-cream-muted">
+                  <span>Standard Pan-India Shipping</span>
+                  <span className="font-semibold text-cream">₹{shippingFee}</span>
+                </div>
+                {totalSavings > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <span>Total Discount Savings</span>
+                    <span>Save ₹{totalSavings}</span>
+                  </div>
+                )}
+                <div className="border-t border-charcoal-light/80 pt-2.5 flex justify-between items-baseline">
+                  <span className="font-heading text-sm font-bold text-cream">Total Amount</span>
+                  <span className="font-heading text-xl font-extrabold text-gold">₹{totalAmount}</span>
+                </div>
+              </div>
+
+              {/* Guarantees */}
+              <div className="mt-5 pt-4 border-t border-gold/10 grid grid-cols-2 gap-2 text-center text-[10px] text-cream-muted/70">
+                <div className="p-2 rounded-xl bg-obsidian/50 border border-charcoal-light/60 flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-gold shrink-0" />
+                  <span>100% Secure Checkout</span>
+                </div>
+                <div className="p-2 rounded-xl bg-obsidian/50 border border-charcoal-light/60 flex items-center justify-center gap-1.5">
+                  <Truck className="h-3.5 w-3.5 text-gold shrink-0" />
+                  <span>Dispatched in 24h</span>
+                </div>
+              </div>
+
+              {/* Back to store link */}
+              <div className="mt-3 text-center">
+                <Link
+                  to="/"
+                  className="text-[11px] font-semibold text-cream-muted/60 hover:text-gold transition-colors inline-flex items-center gap-1"
+                >
+                  <ArrowLeft className="h-3 w-3" />
+                  <span>Continue Shopping / Add More</span>
+                </Link>
+              </div>
+            </div>
+          </aside>
+        </div>
       </main>
     </div>
   )
