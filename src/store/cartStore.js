@@ -72,9 +72,12 @@ export const useCartStore = create((set, get) => ({
         ? p.gallery
         : (mock?.gallery || (p.image ? [p.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']))
 
+      const coverImage = fallbackGallery[0] || p.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
       return {
         ...mock,
         ...p,
+        image: coverImage,
         gallery: fallbackGallery,
         reviews: Array.isArray(p.reviews) && p.reviews.length > 0 ? p.reviews : fallbackReviews,
         description: p.description || mock?.description || `Handcrafted antique gold ${p.name} outframed keychain.`,
@@ -119,12 +122,15 @@ export const useCartStore = create((set, get) => ({
           ? updatedProduct.gallery
           : (p.gallery || mock?.gallery || (updatedProduct.image ? [updatedProduct.image] : [p.image]))
 
+        const finalCover = (Array.isArray(updatedProduct.gallery) && updatedProduct.gallery[0]) || updatedProduct.image || fallbackGallery[0] || p.image
+
         saved = {
           ...mock,
           ...p,
           ...updatedProduct,
           slug,
           fullName,
+          image: finalCover,
           gallery: fallbackGallery,
           reviews: Array.isArray(updatedProduct.reviews) && updatedProduct.reviews.length > 0 ? updatedProduct.reviews : fallbackReviews,
           inStock: updatedProduct.inStock !== undefined ? updatedProduct.inStock : p.inStock !== false,
@@ -144,12 +150,13 @@ export const useCartStore = create((set, get) => ({
     // Also update matching items currently in the cart
     const updatedItems = get().items.map((it) => {
       if (String(it.id) === String(updatedProduct.id)) {
+        const cover = (Array.isArray(updatedProduct.gallery) && updatedProduct.gallery[0]) || updatedProduct.image || it.image
         return {
           ...it,
           name: updatedProduct.name || it.name,
           fullName: updatedProduct.fullName || it.fullName,
           price: updatedProduct.price !== undefined ? Number(updatedProduct.price) : it.price,
-          image: updatedProduct.image || it.image,
+          image: cover,
         }
       }
       return it
@@ -159,12 +166,13 @@ export const useCartStore = create((set, get) => ({
     // Also update matching items in wishlist
     const updatedWishlist = get().wishlist.map((it) => {
       if (String(it.id) === String(updatedProduct.id)) {
+        const cover = (Array.isArray(updatedProduct.gallery) && updatedProduct.gallery[0]) || updatedProduct.image || it.image
         return {
           ...it,
           name: updatedProduct.name || it.name,
           fullName: updatedProduct.fullName || it.fullName,
           price: updatedProduct.price !== undefined ? Number(updatedProduct.price) : it.price,
-          image: updatedProduct.image || it.image,
+          image: cover,
         }
       }
       return it
@@ -184,7 +192,11 @@ export const useCartStore = create((set, get) => ({
     const fullName = newProduct.fullName || `${cleanName} Outframed Keychain`
     const defaultCover =
       newProduct.image ||
+      (newProduct.gallery && newProduct.gallery[0]) ||
       'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
+    const gallery = newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [defaultCover]
+    const productCover = gallery[0] || defaultCover
 
     const productWithDefaults = {
       id: generatedId,
@@ -195,8 +207,8 @@ export const useCartStore = create((set, get) => ({
       price: Number(newProduct.price) || 249,
       originalPrice: Number(newProduct.originalPrice || Math.round(Number(newProduct.price || 249) * 1.8)),
       description: newProduct.description || `Handcrafted antique gold ${cleanName} keychain.`,
-      image: defaultCover,
-      gallery: newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [defaultCover],
+      image: productCover,
+      gallery: gallery,
       reviewCount: 7,
       rating: 4.8,
       inStock: newProduct.inStock !== false,

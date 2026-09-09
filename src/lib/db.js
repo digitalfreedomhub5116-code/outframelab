@@ -187,14 +187,19 @@ export async function getProductBySlugOrId(identifier) {
 }
 
 export async function saveProduct(product) {
+  const finalGallery = Array.isArray(product.gallery) && product.gallery.length > 0
+    ? product.gallery
+    : [product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']
+  const primaryImage = finalGallery[0] || product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
   const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, MOCK_PRODUCTS)
   const idx = stored.findIndex((p) => String(p.id) === String(product.id))
   let updated
   if (idx >= 0) {
     updated = [...stored]
-    updated[idx] = { ...updated[idx], ...product }
+    updated[idx] = { ...updated[idx], ...product, image: primaryImage, gallery: finalGallery }
   } else {
-    updated = [product, ...stored]
+    updated = [{ ...product, image: primaryImage, gallery: finalGallery }, ...stored]
   }
   setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, updated)
 
@@ -215,8 +220,8 @@ export async function saveProduct(product) {
         price: Number(product.price) || 249,
         original_price: Number(product.originalPrice || product.original_price || Math.round(Number(product.price || 249) * 1.8)),
         description: product.description || `Handcrafted antique gold ${cleanName} keychain.`,
-        image: product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80',
-        gallery: Array.isArray(product.gallery) && product.gallery.length > 0 ? product.gallery : [product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'],
+        image: primaryImage,
+        gallery: finalGallery,
         is_active: isActive,
         is_hidden: isHidden,
         updated_at: new Date().toISOString(),

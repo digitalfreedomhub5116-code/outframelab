@@ -1634,7 +1634,7 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-center gap-3">
                     <img
-                      src={item.image}
+                      src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image}
                       alt={item.name}
                       className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
                     />

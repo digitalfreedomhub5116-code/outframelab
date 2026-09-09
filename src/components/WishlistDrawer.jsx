@@ -115,7 +115,7 @@ export default function WishlistDrawer() {
                     className="h-20 w-20 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl border border-gold/15 bg-charcoal"
                   >
                     <img
-                      src={item.image}
+                      src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image}
                       alt={item.name}
                       className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                     />

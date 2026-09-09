@@ -21,6 +21,11 @@ import {
   IndianRupee,
   Layers,
   ChevronRight,
+  ChevronLeft,
+  ArrowLeft,
+  ArrowRight,
+  Star,
+  GripVertical,
   ExternalLink,
   Copy,
   Check,
@@ -298,10 +303,12 @@ function ImageDropzone({
   )
 }
 
-// ── REUSABLE MULTI-IMAGE GALLERY DROPZONE ──
+// ── REUSABLE MULTI-IMAGE GALLERY DROPZONE WITH ORDER CONTROLS & DRAG-REORDER ──
 function GalleryDropzone({ gallery = [], onUpdateGallery }) {
   const [isDragging, setIsDragging] = useState(false)
   const [urlInput, setUrlInput] = useState('')
+  const [draggedCardIdx, setDraggedCardIdx] = useState(null)
+  const [dragOverCardIdx, setDragOverCardIdx] = useState(null)
   const fileInputRef = useRef(null)
 
   const handleFiles = async (files) => {
@@ -328,63 +335,225 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
     }
   }
 
+  // Move single slot: direction -1 for earlier/front, +1 for later/back
+  const handleMoveImage = (index, direction) => {
+    const targetIndex = index + direction
+    if (targetIndex < 0 || targetIndex >= gallery.length) return
+    const updated = [...gallery]
+    const temp = updated[index]
+    updated[index] = updated[targetIndex]
+    updated[targetIndex] = temp
+    onUpdateGallery(updated)
+  }
+
+  // Instantly promote image to #1 Cover position
+  const handleMakeCover = (index) => {
+    if (index === 0) return
+    const target = gallery[index]
+    const remaining = gallery.filter((_, idx) => idx !== index)
+    const updated = [target, ...remaining]
+    onUpdateGallery(updated)
+  }
+
+  // Remove single image from carousel
   const handleRemoveImage = (index) => {
     const updated = gallery.filter((_, idx) => idx !== index)
     onUpdateGallery(updated)
   }
 
-  const handleMakeCover = (index) => {
-    const target = gallery[index]
-    const updated = [target, ...gallery.filter((_, idx) => idx !== index)]
+  // Drag-and-drop card reordering handlers
+  const handleCardDragStart = (e, index) => {
+    setDraggedCardIdx(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  const handleCardDragOver = (e, index) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverCardIdx !== index) {
+      setDragOverCardIdx(index)
+    }
+  }
+
+  const handleCardDragLeave = (index) => {
+    if (dragOverCardIdx === index) {
+      setDragOverCardIdx(null)
+    }
+  }
+
+  const handleCardDrop = (e, targetIndex) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (draggedCardIdx === null || draggedCardIdx === targetIndex) {
+      setDraggedCardIdx(null)
+      setDragOverCardIdx(null)
+      return
+    }
+    const updated = [...gallery]
+    const [movedItem] = updated.splice(draggedCardIdx, 1)
+    updated.splice(targetIndex, 0, movedItem)
     onUpdateGallery(updated)
+    setDraggedCardIdx(null)
+    setDragOverCardIdx(null)
+  }
+
+  const handleCardDragEnd = () => {
+    setDraggedCardIdx(null)
+    setDragOverCardIdx(null)
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="block text-xs font-semibold text-cream-muted">
-          Swipeable Product Carousel Images ({gallery.length} Photos)
-        </label>
-        <span className="text-[11px] text-cream-muted/50">
-          Users can swipe through these images on the product page
-        </span>
+    <div className="space-y-3.5">
+      {/* Header with clear instructions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+        <div className="flex items-center gap-2">
+          <label className="block text-xs font-bold text-cream">
+            Swipeable Carousel Gallery ({gallery.length} {gallery.length === 1 ? 'Photo' : 'Photos'})
+          </label>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gold/15 text-gold border border-gold/30 uppercase tracking-wider">
+            Reorder Controls
+          </span>
+        </div>
+        <p className="text-[11px] text-cream-muted/70">
+          Use <span className="text-gold font-semibold">← Front</span> / <span className="text-gold font-semibold">Back →</span> or <span className="text-gold font-semibold">drag</span> to reorder. <span className="text-gold font-semibold">#1 Cover</span> is the storefront display photo.
+        </p>
       </div>
 
-      {/* Gallery Thumbnails */}
+      {/* Gallery Cards Grid with Front / Back controls */}
       {gallery.length > 0 && (
-        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2.5">
-          {gallery.map((img, idx) => (
-            <div
-              key={idx}
-              className="group relative aspect-square rounded-lg bg-obsidian border border-charcoal-light overflow-hidden"
-            >
-              <img src={img} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
-              {idx === 0 && (
-                <span className="absolute bottom-1 left-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-gold text-obsidian tracking-wider uppercase">
-                  Cover
-                </span>
-              )}
-              {/* Overlay Actions */}
-              <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 p-1">
-                {idx !== 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {gallery.map((img, idx) => {
+            const isCover = idx === 0
+            const isLast = idx === gallery.length - 1
+            const isBeingDragged = draggedCardIdx === idx
+            const isDragOverTarget = dragOverCardIdx === idx
+
+            return (
+              <div
+                key={idx}
+                draggable
+                onDragStart={(e) => handleCardDragStart(e, idx)}
+                onDragOver={(e) => handleCardDragOver(e, idx)}
+                onDragLeave={() => handleCardDragLeave(idx)}
+                onDrop={(e) => handleCardDrop(e, idx)}
+                onDragEnd={handleCardDragEnd}
+                className={`group relative flex flex-col rounded-xl bg-obsidian border overflow-hidden transition-all select-none ${
+                  isBeingDragged
+                    ? 'opacity-30 scale-95 border-gold/50'
+                    : isDragOverTarget
+                    ? 'border-gold ring-2 ring-gold/70 scale-[1.03] shadow-lg shadow-gold/20'
+                    : isCover
+                    ? 'border-gold/60 shadow-md shadow-gold/10'
+                    : 'border-charcoal-light hover:border-gold/40'
+                }`}
+              >
+                {/* Image Preview Container */}
+                <div className="relative aspect-square w-full bg-obsidian overflow-hidden cursor-grab active:cursor-grabbing">
+                  <img
+                    src={img}
+                    alt={`Carousel photo ${idx + 1}`}
+                    className="w-full h-full object-cover pointer-events-none"
+                  />
+
+                  {/* Position Badge (Top-Left) */}
+                  <div className="absolute top-1.5 left-1.5 z-10">
+                    {isCover ? (
+                      <span className="flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-gold text-obsidian tracking-wider uppercase shadow-md">
+                        <Star className="w-3 h-3 fill-obsidian text-obsidian" /> #1 Cover
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur text-cream border border-white/10 shadow-md">
+                        #{idx + 1}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Delete Button (Top-Right) */}
                   <button
                     type="button"
-                    onClick={() => handleMakeCover(idx)}
-                    className="text-[10px] text-gold hover:underline font-semibold cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRemoveImage(idx)
+                    }}
+                    title="Delete this image"
+                    className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/85 backdrop-blur text-cream-muted/80 hover:text-rose-400 hover:bg-black border border-white/10 flex items-center justify-center transition-colors cursor-pointer"
                   >
-                    Set Cover
+                    <X className="w-3.5 h-3.5" />
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveImage(idx)}
-                  className="text-[10px] text-rose-400 hover:underline font-semibold cursor-pointer"
-                >
-                  Delete
-                </button>
+
+                  {/* Drag Cue Overlay on hover */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-cream bg-black/75 px-2 py-1 rounded-full border border-white/10">
+                      <GripVertical className="w-3 h-3 text-gold" />
+                      <span>Drag to reorder</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Order Control Bar: Front / Back / Cover */}
+                <div className="p-1.5 bg-charcoal/95 border-t border-charcoal-light flex items-center justify-between gap-1">
+                  {/* Move to Front (←) */}
+                  <button
+                    type="button"
+                    disabled={isCover}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleMoveImage(idx, -1)
+                    }}
+                    title={isCover ? 'Already at the very front (#1 Cover)' : 'Move towards front (earlier in carousel)'}
+                    className={`flex-1 py-1 px-1.5 rounded-md flex items-center justify-center gap-1 text-[11px] font-bold transition-all ${
+                      isCover
+                        ? 'text-cream-muted/20 bg-transparent cursor-not-allowed'
+                        : 'text-cream hover:text-gold hover:bg-gold/15 active:scale-95 cursor-pointer'
+                    }`}
+                  >
+                    <ArrowLeft className="w-3 h-3 shrink-0" />
+                    <span>Front</span>
+                  </button>
+
+                  {/* Set as Cover Quick Button (if not already cover) */}
+                  {!isCover ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleMakeCover(idx)
+                      }}
+                      title="Promote directly to #1 Storefront Cover"
+                      className="px-1.5 py-1 rounded-md text-[10px] font-bold text-gold/80 hover:text-gold hover:bg-gold/15 active:scale-95 transition-all cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Star className="w-2.5 h-2.5 fill-gold/40" />
+                      <span className="hidden sm:inline">Cover</span>
+                    </button>
+                  ) : (
+                    <span className="text-[9px] font-extrabold text-gold/60 px-1 py-1 uppercase tracking-wider">
+                      Cover
+                    </span>
+                  )}
+
+                  {/* Move to Back (→) */}
+                  <button
+                    type="button"
+                    disabled={isLast}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleMoveImage(idx, 1)
+                    }}
+                    title={isLast ? 'Already at the end of the carousel' : 'Move towards back (later in carousel)'}
+                    className={`flex-1 py-1 px-1.5 rounded-md flex items-center justify-center gap-1 text-[11px] font-bold transition-all ${
+                      isLast
+                        ? 'text-cream-muted/20 bg-transparent cursor-not-allowed'
+                        : 'text-cream hover:text-gold hover:bg-gold/15 active:scale-95 cursor-pointer'
+                    }`}
+                  >
+                    <span>Back</span>
+                    <ArrowRight className="w-3 h-3 shrink-0" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -416,7 +585,7 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
         />
         <div className="flex items-center justify-center gap-2 text-xs font-medium text-cream">
           <Upload className="w-4 h-4 text-gold" />
-          <span>{isDragging ? 'Drop Multiple Photos to Add!' : 'Drag & Drop Multiple Images for Carousel, or Browse'}</span>
+          <span>{isDragging ? 'Drop Photos to Append to Carousel!' : 'Drag & Drop Multiple Images for Carousel, or Browse'}</span>
         </div>
       </div>
 
@@ -426,7 +595,7 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
           type="url"
           value={urlInput}
           onChange={(e) => setUrlInput(e.target.value)}
-          placeholder="Add extra gallery image via web URL..."
+          placeholder="Add extra gallery image via web URL (https://...)"
           className="flex-1 px-3 py-1.5 rounded-lg bg-obsidian border border-charcoal-light text-xs text-cream placeholder-cream-muted/40 focus:outline-none focus:border-gold/50"
         />
         <button
@@ -438,7 +607,7 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
             }
           }}
           disabled={!urlInput.trim()}
-          className="px-3 py-1.5 rounded-lg bg-charcoal-light text-cream-muted hover:text-cream text-xs font-semibold disabled:opacity-40 transition-colors cursor-pointer"
+          className="px-3.5 py-1.5 rounded-lg bg-charcoal-light text-cream-muted hover:text-cream text-xs font-semibold disabled:opacity-40 transition-colors cursor-pointer"
         >
           Add to Gallery
         </button>
@@ -967,16 +1136,21 @@ export default function AdminPanelPage() {
     e.preventDefault()
     if (!editingProduct) return
 
+    const finalGallery =
+      editingProduct.gallery && editingProduct.gallery.length > 0
+        ? editingProduct.gallery
+        : (editingProduct.image ? [editingProduct.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+
+    const finalCover = finalGallery[0] || editingProduct.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+
     const productPayload = {
       ...editingProduct,
       price: Number(editingProduct.price),
       originalPrice: Number(editingProduct.originalPrice || Math.round(editingProduct.price * 1.8)),
       inStock: editingProduct.inStock !== false,
       isHidden: editingProduct.isHidden === true,
-      gallery:
-        editingProduct.gallery && editingProduct.gallery.length > 0
-          ? editingProduct.gallery
-          : [editingProduct.image],
+      image: finalCover,
+      gallery: finalGallery,
     }
 
     // Update global store (affects Home, Category, Product Detail, Cart, Wishlist)
@@ -995,12 +1169,15 @@ export default function AdminPanelPage() {
 
     const defaultCover =
       newProduct.image ||
+      (newProduct.gallery && newProduct.gallery[0]) ||
       'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
 
     const gallery =
       newProduct.gallery && newProduct.gallery.length > 0
         ? newProduct.gallery
         : [defaultCover]
+
+    const productCover = gallery[0] || defaultCover
 
     const maxId = Math.max(0, ...products.map((p) => Number(p.id) || 0))
     const nextId = maxId > 0 ? maxId + 1 : 26
@@ -1016,7 +1193,7 @@ export default function AdminPanelPage() {
       price: Number(newProduct.price),
       originalPrice: Number(newProduct.originalPrice || Math.round(newProduct.price * 1.8)),
       description: newProduct.description || `Handcrafted antique gold ${cleanName} keychain.`,
-      image: defaultCover,
+      image: productCover,
       gallery: gallery,
       inStock: newProduct.inStock !== false,
       isHidden: newProduct.isHidden === true,
@@ -2724,7 +2901,7 @@ export default function AdminPanelPage() {
                           value={editingProduct.image}
                           onChange={(newUrl) => {
                             const newGallery = editingProduct.gallery?.includes(newUrl)
-                              ? editingProduct.gallery
+                              ? [newUrl, ...editingProduct.gallery.filter((u) => u !== newUrl)]
                               : [newUrl, ...(editingProduct.gallery || [])]
                             setEditingProduct({
                               ...editingProduct,
@@ -3033,7 +3210,7 @@ export default function AdminPanelPage() {
                           value={newProduct.image}
                           onChange={(url) => {
                             const newGallery = newProduct.gallery.includes(url)
-                              ? newProduct.gallery
+                              ? [url, ...newProduct.gallery.filter((u) => u !== url)]
                               : [url, ...newProduct.gallery]
                             setNewProduct({
                               ...newProduct,

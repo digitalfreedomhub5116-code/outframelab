@@ -14,7 +14,7 @@ function CartItem({ item }) {
     <div className="flex gap-3.5 rounded-xl border border-charcoal-light/60 bg-charcoal/80 p-3">
       {/* Thumbnail */}
       <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gold/15 bg-obsidian">
-        <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+        <img src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image} alt={item.name} className="h-full w-full object-cover" />
       </div>
 
       {/* Details */}

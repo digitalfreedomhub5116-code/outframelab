@@ -44,7 +44,7 @@ function ProductCard({ product }) {
       {/* Product Background Image & Wishlist Button */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-obsidian">
         <img
-          src={product.image}
+          src={(Array.isArray(product.gallery) && product.gallery[0]) || product.image}
           alt={product.name}
           className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
             isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''
