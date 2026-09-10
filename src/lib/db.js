@@ -1512,7 +1512,7 @@ export async function getUserOrders(user = null) {
 // ── 8. AUTOMATED ADMIN NOTIFICATIONS (INSTANT GMAIL & WHATSAPP) ──
 const LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY = 'outframe_admin_notification_settings'
 export const DEFAULT_ADMIN_WHATSAPP = '918530085116'
-export const DEFAULT_ADMIN_EMAIL = 'krishnavalostore@gmail.com'
+export const DEFAULT_ADMIN_EMAIL = 'digitalfreedomhub5116@gmail.com'
 
 /**
  * Fetch Admin Notification Settings from Supabase admin_settings table or localStorage

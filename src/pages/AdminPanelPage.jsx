@@ -753,7 +753,7 @@ export default function AdminPanelPage() {
   // Automated Order Notification Settings State (Gmail + WhatsApp)
   const [notificationSettings, setNotificationSettings] = useState({
     email_enabled: true,
-    admin_email: 'krishnavalostore@gmail.com',
+    admin_email: 'digitalfreedomhub5116@gmail.com',
     whatsapp_enabled: true,
     whatsapp_phone: '8530085116',
     callmebot_api_key: '',
@@ -3967,11 +3967,11 @@ export default function AdminPanelPage() {
                             admin_email: e.target.value.trim(),
                           })
                         }
-                        placeholder="krishnavalostore@gmail.com"
+                        placeholder="digitalfreedomhub5116@gmail.com"
                         className="w-full px-3.5 py-2.5 rounded-lg bg-charcoal border border-charcoal-light text-sm font-mono text-cream focus:outline-none focus:border-blue-400"
                       />
                       <p className="text-[11px] text-cream-muted/50 mt-1">
-                        Prefilled: krishnavalostore@gmail.com (receives all order alerts)
+                        Prefilled: digitalfreedomhub5116@gmail.com (receives all order alerts)
                       </p>
                     </div>
 
