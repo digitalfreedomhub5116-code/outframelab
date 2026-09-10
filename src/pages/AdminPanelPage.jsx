@@ -49,7 +49,8 @@ import {
   Smartphone,
   Key,
   Mail,
-  CreditCard
+  CreditCard,
+  Send
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -4531,6 +4532,31 @@ export default function AdminPanelPage() {
                       )}
                     </button>
                   </div>
+
+                  {/* WhatsApp Test Result Callout */}
+                  {whatsappTestResult && (
+                    <div
+                      className={`p-3.5 rounded-lg text-xs border ${
+                        whatsappTestResult.type === 'success'
+                          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                          : 'bg-red-950/40 border-red-500/40 text-red-200'
+                      } flex items-start gap-2.5`}
+                    >
+                      {whatsappTestResult.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-bold">
+                          {whatsappTestResult.type === 'success'
+                            ? 'WhatsApp Alert Delivered!'
+                            : 'WhatsApp Test Failed'}
+                        </p>
+                        <p className="mt-0.5 opacity-90">{whatsappTestResult.message}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Save All Notification Configurations */}
