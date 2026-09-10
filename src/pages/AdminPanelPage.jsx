@@ -44,11 +44,26 @@ import {
   Globe,
   Ban,
   XCircle,
-  Lock
+  Lock,
+  MessageSquare,
+  Smartphone,
+  Send,
+  Key
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
-import { saveProduct, deleteProductFromDb, getAllOrders, updateOrderStatus, deleteOrder, uploadProductImage } from '../lib/db'
+import {
+  saveProduct,
+  deleteProductFromDb,
+  getAllOrders,
+  updateOrderStatus,
+  deleteOrder,
+  uploadProductImage,
+  getAdminNotificationSettings,
+  saveAdminNotificationSettings,
+  sendTestWhatsAppNotification,
+  DEFAULT_ADMIN_WHATSAPP
+} from '../lib/db'
 
 // Helper to resolve clean, authentic product name, high-res image, and quantity for order items
 function resolveOrderItems(rawOrder, catalogProducts = []) {
@@ -697,7 +712,16 @@ export default function AdminPanelPage() {
     setAuthError('')
   }
 
-  const [activeTab, setActiveTab] = useState('overview')
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const tabParam = params.get('tab')
+      if (['overview', 'orders', 'products', 'settings'].includes(tabParam)) {
+        return tabParam
+      }
+    } catch (e) {}
+    return 'overview'
+  })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Global Products State from Zustand (synced to LocalStorage and database)
@@ -711,11 +735,28 @@ export default function AdminPanelPage() {
 
   // Orders State
   const [orders, setOrders] = useState([])
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      return params.get('search') || ''
+    } catch (e) {
+      return ''
+    }
+  })
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [copiedAwb, setCopiedAwb] = useState(null)
   const [toast, setToast] = useState(null)
   const [generatingAwb, setGeneratingAwb] = useState({})
+
+  // Automated WhatsApp Notification Settings State
+  const [whatsappSettings, setWhatsappSettings] = useState({
+    whatsapp_enabled: true,
+    whatsapp_phone: '8530085116',
+    callmebot_api_key: '',
+  })
+  const [isSavingWhatsapp, setIsSavingWhatsapp] = useState(false)
+  const [isTestingWhatsapp, setIsTestingWhatsapp] = useState(false)
+  const [whatsappTestResult, setWhatsappTestResult] = useState(null)
 
   // Products Tab Local Filters
   const [productSearch, setProductSearch] = useState('')
@@ -777,6 +818,65 @@ export default function AdminPanelPage() {
       })
       .catch(() => setShiprocketConnected(false))
   }, [isAuthenticated])
+
+  // Load WhatsApp notification settings from Supabase / localStorage
+  useEffect(() => {
+    if (!isAuthenticated) return
+    getAdminNotificationSettings().then((cfg) => {
+      if (cfg) {
+        setWhatsappSettings({
+          whatsapp_enabled: cfg.whatsapp_enabled ?? true,
+          whatsapp_phone: cfg.whatsapp_phone?.replace(/^91/, '') || '8530085116',
+          callmebot_api_key: cfg.callmebot_api_key || '',
+        })
+      }
+    })
+  }, [isAuthenticated])
+
+  const handleSaveWhatsappSettings = async () => {
+    setIsSavingWhatsapp(true)
+    setWhatsappTestResult(null)
+    try {
+      await saveAdminNotificationSettings({
+        whatsapp_enabled: whatsappSettings.whatsapp_enabled,
+        whatsapp_phone: whatsappSettings.whatsapp_phone,
+        callmebot_api_key: whatsappSettings.callmebot_api_key,
+      })
+      showToast('WhatsApp notification configurations saved successfully!', 'success')
+    } catch (err) {
+      showToast('Failed to save WhatsApp settings: ' + err.message, 'error')
+    } finally {
+      setIsSavingWhatsapp(false)
+    }
+  }
+
+  const handleTestWhatsappNotification = async () => {
+    if (!whatsappSettings.callmebot_api_key?.trim()) {
+      showToast('Please enter your CallMeBot API Key before testing.', 'error')
+      return
+    }
+    setIsTestingWhatsapp(true)
+    setWhatsappTestResult(null)
+    try {
+      await sendTestWhatsAppNotification(
+        whatsappSettings.whatsapp_phone,
+        whatsappSettings.callmebot_api_key
+      )
+      setWhatsappTestResult({
+        type: 'success',
+        message: `Test alert sent successfully to +91 ${whatsappSettings.whatsapp_phone}! Check your phone.`,
+      })
+      showToast('Test WhatsApp message delivered!', 'success')
+    } catch (err) {
+      setWhatsappTestResult({
+        type: 'error',
+        message: err.message || 'Failed to send WhatsApp message. Please verify your phone number and API key.',
+      })
+      showToast('WhatsApp test failed: ' + (err.message || 'Check credentials'), 'error')
+    } finally {
+      setIsTestingWhatsapp(false)
+    }
+  }
 
   // Load orders from Supabase + LocalStorage fallback
   useEffect(() => {
@@ -3726,6 +3826,238 @@ export default function AdminPanelPage() {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Section 4: Automated Admin WhatsApp Order Notifications */}
+              <div className="rounded-xl bg-charcoal border border-charcoal-light p-6 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-charcoal-light pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading font-bold text-base text-cream">
+                          Automated WhatsApp Order Alerts
+                        </h3>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          100% Background Automation
+                        </span>
+                      </div>
+                      <p className="text-xs text-cream-muted/70 mt-0.5">
+                        Delivers instant WhatsApp notifications to your personal number the moment any customer places an order
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {whatsappSettings.callmebot_api_key ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Ready & Connected</span>
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 shadow-sm">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                        <span>API Key Setup Required</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Master Switch */}
+                <div className="flex items-center justify-between p-4 rounded-lg bg-obsidian border border-charcoal-light">
+                  <div>
+                    <span className="text-xs font-semibold text-cream block">
+                      Enable Automated WhatsApp Order Notifications
+                    </span>
+                    <span className="text-[11px] text-cream-muted/60">
+                      When enabled, orders placed on Outframe Labs will instantly alert your WhatsApp number in the background without any customer friction
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWhatsappSettings({
+                        ...whatsappSettings,
+                        whatsapp_enabled: !whatsappSettings.whatsapp_enabled,
+                      })
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      whatsappSettings.whatsapp_enabled ? 'bg-emerald-500' : 'bg-charcoal-light'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        whatsappSettings.whatsapp_enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Settings Input Fields */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Admin WhatsApp Phone Number</span>
+                    </label>
+                    <div className="flex items-center rounded-lg bg-obsidian border border-charcoal-light focus-within:border-emerald-500/50 overflow-hidden">
+                      <span className="px-3 py-2.5 bg-charcoal/50 text-xs font-mono font-bold text-cream-muted border-r border-charcoal-light">
+                        +91
+                      </span>
+                      <input
+                        type="text"
+                        value={whatsappSettings.whatsapp_phone}
+                        onChange={(e) =>
+                          setWhatsappSettings({
+                            ...whatsappSettings,
+                            whatsapp_phone: e.target.value.replace(/[^0-9]/g, ''),
+                          })
+                        }
+                        placeholder="8530085116"
+                        className="w-full px-3 py-2.5 bg-transparent text-sm font-mono text-cream focus:outline-none"
+                      />
+                    </div>
+                    <p className="text-[11px] text-cream-muted/50 mt-1">
+                      Your registered personal WhatsApp recipient (prefilled: 8530085116)
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-gold" />
+                      <span>CallMeBot WhatsApp API Key</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={whatsappSettings.callmebot_api_key}
+                      onChange={(e) =>
+                        setWhatsappSettings({
+                          ...whatsappSettings,
+                          callmebot_api_key: e.target.value.trim(),
+                        })
+                      }
+                      placeholder="Enter API Key from WhatsApp bot (e.g. 123456)"
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-obsidian border border-charcoal-light text-sm font-mono text-cream focus:outline-none focus:border-gold/50"
+                    />
+                    <p className="text-[11px] text-cream-muted/50 mt-1">
+                      Received directly from CallMeBot on WhatsApp after 1-time authorization
+                    </p>
+                  </div>
+                </div>
+
+                {/* 10-Second Activation Guide */}
+                <div className="p-4 rounded-xl bg-obsidian/90 border border-emerald-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      <span className="text-xs font-bold text-cream uppercase tracking-wider">
+                        1-Time Free Activation (Takes 10 Seconds)
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400/80 font-mono">Official CallMeBot Bot</span>
+                  </div>
+
+                  <p className="text-xs text-cream-muted/80 leading-relaxed">
+                    WhatsApp spam policies require a 1-time permission from your phone before automated messages can be delivered to you. Follow these 3 simple steps:
+                  </p>
+
+                  <ol className="text-xs text-cream-muted/80 space-y-2 list-decimal list-inside pl-1">
+                    <li>
+                      Click the green button below to open WhatsApp to <strong>+34 644 10 55 84</strong> from your number (<strong>+91 {whatsappSettings.whatsapp_phone || '8530085116'}</strong>).
+                    </li>
+                    <li>
+                      Send the pre-filled authorization text: <code className="px-2 py-0.5 rounded bg-charcoal text-gold font-mono text-[11px]">I allow callmebot to send me messages</code>
+                    </li>
+                    <li>
+                      The bot will instantly reply with your <strong>API Key</strong>. Copy that key, paste it in the field above, and click <strong>"Save WhatsApp Settings"</strong>!
+                    </li>
+                  </ol>
+
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
+                    <a
+                      href={`https://wa.me/34644105584?text=I%20allow%20callmebot%20to%20send%20me%20messages`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-md hover:scale-[1.02] cursor-pointer"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>1. Open WhatsApp to Get API Key (+34 644 10 55 84)</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Actions: Save & Send Live Test Alert */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-charcoal-light">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isSavingWhatsapp}
+                      onClick={handleSaveWhatsappSettings}
+                      className="px-5 py-2.5 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] disabled:opacity-50 cursor-pointer flex items-center gap-2 shadow-sm"
+                    >
+                      {isSavingWhatsapp ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Save WhatsApp Settings</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isTestingWhatsapp || !whatsappSettings.callmebot_api_key}
+                      onClick={handleTestWhatsappNotification}
+                      className="px-5 py-2.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold flex items-center gap-2 disabled:opacity-40 cursor-pointer"
+                    >
+                      {isTestingWhatsapp ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Sending Test Alert...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Send Test WhatsApp Alert</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <span className="text-[11px] text-cream-muted/50 italic">
+                    Recipient: +91 {whatsappSettings.whatsapp_phone || '8530085116'}
+                  </span>
+                </div>
+
+                {/* Test Result Message Box */}
+                {whatsappTestResult && (
+                  <div
+                    className={`p-4 rounded-lg text-xs border ${
+                      whatsappTestResult.type === 'success'
+                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                        : 'bg-red-950/40 border-red-500/40 text-red-200'
+                    } flex items-start gap-3`}
+                  >
+                    {whatsappTestResult.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-1">
+                      <p className="font-bold">
+                        {whatsappTestResult.type === 'success' ? 'Alert Dispatched Successfully!' : 'Delivery Notice:'}
+                      </p>
+                      <p className="leading-relaxed opacity-90">{whatsappTestResult.message}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Save Settings Action */}

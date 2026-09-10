@@ -519,6 +519,12 @@ export async function createOrder(orderPayload) {
   const existingOrders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
   setLocalData(LOCAL_STORAGE_ORDERS_KEY, [newOrder, ...existingOrders])
 
+  // 3. Automated WhatsApp Order Notification to Admin (+91 8530085116)
+  // 100% automated in the background — zero customer delay or friction
+  sendAdminOrderNotification(newOrder).catch((err) => {
+    console.warn('[WhatsApp Notification] Background dispatch error:', err)
+  })
+
   return newOrder
 }
 
@@ -1499,3 +1505,220 @@ export async function getUserOrders(user = null) {
     (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)
   )
 }
+
+// ── 8. AUTOMATED ADMIN WHATSAPP NOTIFICATIONS ──
+const LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY = 'outframe_admin_notification_settings'
+export const DEFAULT_ADMIN_WHATSAPP = '918530085116'
+
+/**
+ * Fetch Admin WhatsApp Notification Settings from Supabase admin_settings table or localStorage
+ */
+export async function getAdminNotificationSettings() {
+  const fallback = {
+    whatsapp_enabled: true,
+    whatsapp_phone: DEFAULT_ADMIN_WHATSAPP,
+    callmebot_api_key: '',
+  }
+
+  const local = getLocalData(LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY, null)
+  let current = local ? { ...fallback, ...local } : fallback
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('admin_settings')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle()
+
+      if (!error && data) {
+        current = {
+          whatsapp_enabled: data.whatsapp_enabled ?? true,
+          whatsapp_phone: data.whatsapp_phone || DEFAULT_ADMIN_WHATSAPP,
+          callmebot_api_key: data.callmebot_api_key || '',
+        }
+        setLocalData(LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY, current)
+      }
+    } catch (e) {
+      console.warn('Error reading admin notification settings from Supabase:', e)
+    }
+  }
+
+  return current
+}
+
+/**
+ * Save Admin WhatsApp Notification Settings to Supabase and localStorage
+ */
+export async function saveAdminNotificationSettings(newSettings) {
+  const rawPhone = String(newSettings.whatsapp_phone || DEFAULT_ADMIN_WHATSAPP).replace(/[^0-9]/g, '')
+  const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone.startsWith('0') && rawPhone.length === 11 ? `91${rawPhone.slice(1)}` : rawPhone
+
+  const payload = {
+    whatsapp_enabled: newSettings.whatsapp_enabled ?? true,
+    whatsapp_phone: cleanPhone || DEFAULT_ADMIN_WHATSAPP,
+    callmebot_api_key: String(newSettings.callmebot_api_key || '').trim(),
+  }
+
+  // 1. Save locally for instant reactivity
+  setLocalData(LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY, payload)
+
+  // 2. Persist globally to Supabase admin_settings
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase
+        .from('admin_settings')
+        .upsert({
+          id: 'default',
+          whatsapp_enabled: payload.whatsapp_enabled,
+          whatsapp_phone: payload.whatsapp_phone,
+          callmebot_api_key: payload.callmebot_api_key,
+          updated_at: new Date().toISOString(),
+        })
+    } catch (e) {
+      console.warn('Error saving admin notification settings to Supabase:', e)
+    }
+  }
+
+  return payload
+}
+
+/**
+ * Formats a clean, professional WhatsApp alert for new orders
+ */
+export function formatOrderWhatsAppMessage(order) {
+  const orderNum = order.order_number || 'N/A'
+  const custName = order.customer_name || 'Valued Customer'
+  const custPhone = order.customer_phone || 'N/A'
+  const addr = order.shipping_address || {}
+  const cityState = [addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')
+  const streetAddr = [addr.address_line, addr.landmark].filter(Boolean).join(', ')
+
+  // Format line items
+  const items = Array.isArray(order.items) && order.items.length > 0 ? order.items : []
+  const itemsText = items.length > 0
+    ? items.map((it) => `• ${it.quantity || 1}x ${it.name || it.product_name || 'Antique Gold Keychain'} (₹${it.price || 0})`).join('\n')
+    : '• 1x Keychain'
+
+  const total = order.total_amount || order.subtotal || 0
+  const paymentMode = order.payment_method === 'COD' ? '💵 Cash on Delivery (COD)' : '💳 Prepaid (Online Payment)'
+  const timeStr = new Date(order.created_at || Date.now()).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
+  // Deep-link to admin panel orders tab filtered to this order
+  const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://outframelabs.com'
+  const adminUrl = `${origin}/admin-panel-access?tab=orders&search=${encodeURIComponent(orderNum)}`
+
+  return (
+    `🚨 *NEW ORDER RECEIVED - Outframe Labs* 🚨\n\n` +
+    `📦 *Order:* ${orderNum}\n` +
+    `👤 *Customer:* ${custName}\n` +
+    `📞 *Phone:* ${custPhone}\n` +
+    `📍 *Location:* ${cityState || 'India'}\n` +
+    `🏠 *Address:* ${streetAddr || 'See Admin Panel'}\n\n` +
+    `🛍️ *Items Ordered:*\n${itemsText}\n\n` +
+    `💰 *Total Amount:* ₹${total}\n` +
+    `💳 *Payment:* ${paymentMode}\n` +
+    `⏰ *Time:* ${timeStr}\n\n` +
+    `⚡ *Action: Generate AWB & Ship:*\n${adminUrl}`
+  )
+}
+
+/**
+ * 100% Automated WhatsApp notification to admin on order placement.
+ * Runs in the background without any customer delay or friction.
+ */
+export async function sendAdminOrderNotification(order) {
+  try {
+    const settings = await getAdminNotificationSettings()
+    if (!settings.whatsapp_enabled) {
+      console.log('[WhatsApp Alert] WhatsApp notifications disabled in settings.')
+      return { success: false, reason: 'disabled' }
+    }
+
+    const raw = String(settings.whatsapp_phone || DEFAULT_ADMIN_WHATSAPP).replace(/[^0-9]/g, '')
+    const cleanPhone = raw.length === 10 ? `91${raw}` : raw.startsWith('0') && raw.length === 11 ? `91${raw.slice(1)}` : raw
+    const apiKey = settings.callmebot_api_key
+
+    if (!apiKey) {
+      console.warn('[WhatsApp Alert] CallMeBot API key is not configured yet in Admin Settings.')
+      return { success: false, reason: 'missing_api_key' }
+    }
+
+    const message = formatOrderWhatsAppMessage(order)
+
+    // 1. Try Supabase Edge Function first (server-side, no CORS limitations)
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.functions.invoke('send-whatsapp-notification', {
+          body: {
+            phone: cleanPhone,
+            apiKey: apiKey,
+            message: message,
+          },
+        })
+
+        if (!error && data?.success) {
+          console.log(`[WhatsApp Alert] Sent to admin (+${cleanPhone}) via Supabase Edge Function!`)
+          return { success: true, via: 'edge_function', data }
+        } else if (error) {
+          console.warn('[WhatsApp Alert] Edge Function returned error, trying direct gateway:', error)
+        }
+      } catch (fe) {
+        console.warn('[WhatsApp Alert] Edge Function invocation failed, trying direct gateway:', fe)
+      }
+    }
+
+    // 2. Direct browser fetch fallback (mode: 'no-cors' allows opaque background trigger)
+    const directUrl = `https://api.callmebot.com/whatsapp.php?phone=${cleanPhone}&text=${encodeURIComponent(message)}&apikey=${encodeURIComponent(apiKey)}`
+    await fetch(directUrl, { mode: 'no-cors' })
+    console.log(`[WhatsApp Alert] Sent to admin (+${cleanPhone}) via direct gateway`)
+    return { success: true, via: 'direct_gateway' }
+  } catch (err) {
+    console.error('[WhatsApp Alert] Unexpected notification error:', err)
+    return { success: false, error: err }
+  }
+}
+
+/**
+ * Send a live test notification to verify CallMeBot credentials
+ */
+export async function sendTestWhatsAppNotification(phone, apiKey) {
+  const raw = String(phone || DEFAULT_ADMIN_WHATSAPP).replace(/[^0-9]/g, '')
+  const cleanPhone = raw.length === 10 ? `91${raw}` : raw.startsWith('0') && raw.length === 11 ? `91${raw.slice(1)}` : raw
+
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error('Please enter your CallMeBot API Key to test WhatsApp notifications.')
+  }
+
+  const testMessage =
+    `✅ *Outframe Labs WhatsApp Notification Connected!*\n\n` +
+    `🎉 Your automated order alert system is now active.\n` +
+    `Whenever a customer places an order, you will receive full customer details, ordered products, and a direct link to generate the AWB.\n\n` +
+    `📱 Admin Phone: +${cleanPhone}\n` +
+    `⏰ Connected At: ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}`
+
+  // Use Supabase Edge Function to read response and report back to UI
+  const edgeUrl = 'https://sooedjbqgrdjtwiobjpr.supabase.co/functions/v1/send-whatsapp-notification'
+  const res = await fetch(edgeUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      phone: cleanPhone,
+      apiKey: apiKey.trim(),
+      message: testMessage,
+    }),
+  })
+
+  const json = await res.json()
+  if (!res.ok || !json.success) {
+    const errorDetail = json?.response?.replace(/<[^>]*>?/gm, '') || json?.error || 'Failed to send WhatsApp message.'
+    throw new Error(errorDetail)
+  }
+
+  return json
+}
+
