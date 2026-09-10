@@ -19,8 +19,11 @@ function CartRouteHandler() {
   const openCart = useCartStore((s) => s.openCart)
   const navigate = useNavigate()
   useEffect(() => {
-    openCart()
     navigate('/', { replace: true })
+    const t = setTimeout(() => {
+      openCart()
+    }, 60)
+    return () => clearTimeout(t)
   }, [openCart, navigate])
   return null
 }

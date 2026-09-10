@@ -21,7 +21,6 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
-import CartDrawer from '../components/CartDrawer'
 import {
   getCurrentCustomer,
   getUserAddresses,
@@ -88,6 +87,19 @@ export default function CheckoutPage() {
     setCurrentStepState(1)
     closeCart()
     navigate('/')
+  }
+
+  // Terminate checkout session and open normal side cart drawer on store
+  const handleOpenCartFromCheckout = () => {
+    try {
+      sessionStorage.removeItem('outframe_checkout_step')
+    } catch (e) {}
+    setCurrentStepState(1)
+    closeCart()
+    navigate('/')
+    setTimeout(() => {
+      openCart()
+    }, 60)
   }
 
   // Listen for restart checkout event (e.g. from CartDrawer Proceed to Checkout)
@@ -805,13 +817,7 @@ export default function CheckoutPage() {
             <div className="flex items-center gap-3 sm:gap-4">
               <button
                 type="button"
-                onClick={() => {
-                  try {
-                    sessionStorage.removeItem('outframe_checkout_step')
-                  } catch (e) {}
-                  setCurrentStepState(1)
-                  openCart()
-                }}
+                onClick={handleOpenCartFromCheckout}
                 className="group relative rounded-full p-2 text-cream-muted transition-all hover:bg-charcoal hover:text-gold cursor-pointer"
                 aria-label="View Cart"
                 title="View Cart"
@@ -2155,8 +2161,6 @@ export default function CheckoutPage() {
         </div>
       </main>
 
-      {/* Normal Cart Drawer from the side */}
-      <CartDrawer />
     </div>
   )
 }

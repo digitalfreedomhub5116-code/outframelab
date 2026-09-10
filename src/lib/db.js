@@ -736,10 +736,21 @@ export function getCurrentCustomer() {
 }
 
 export function saveCustomerProfile(user) {
+  const prev = getLocalData(LOCAL_STORAGE_USER_KEY, null)
   setLocalData(LOCAL_STORAGE_USER_KEY, user)
-  authListeners.forEach((fn) => {
-    try { fn(user) } catch (e) {}
-  })
+  const hasChanged =
+    !prev ||
+    !user ||
+    prev.id !== user.id ||
+    prev.email !== user.email ||
+    prev.name !== user.name ||
+    prev.phone !== user.phone ||
+    prev.avatar_url !== user.avatar_url
+  if (hasChanged) {
+    authListeners.forEach((fn) => {
+      try { fn(user) } catch (e) {}
+    })
+  }
   return user
 }
 
@@ -1300,10 +1311,16 @@ export function initAuthListener(onUserChange) {
   if (!onUserChange) return () => {}
   authListeners.add(onUserChange)
 
-  // 1. Immediately provide cached customer profile
+  // 1. Immediately provide cached customer profile asynchronously to avoid re-render loops
   const current = getCurrentCustomer()
   if (current) {
-    onUserChange(current)
+    setTimeout(() => {
+      if (authListeners.has(onUserChange)) {
+        try {
+          onUserChange(current)
+        } catch (e) {}
+      }
+    }, 0)
   }
 
   if (isSupabaseConfigured && supabase) {
@@ -1320,7 +1337,6 @@ export function initAuthListener(onUserChange) {
           provider: u.app_metadata?.provider || 'email',
         }
         saveCustomerProfile(profile)
-        onUserChange(profile)
       }
     }).catch(() => {})
 
@@ -1337,10 +1353,11 @@ export function initAuthListener(onUserChange) {
           provider: u.app_metadata?.provider || 'email',
         }
         saveCustomerProfile(profile)
-        onUserChange(profile)
       } else if (event === 'SIGNED_OUT') {
         localStorage.removeItem(LOCAL_STORAGE_USER_KEY)
-        onUserChange(null)
+        authListeners.forEach((fn) => {
+          try { fn(null) } catch (e) {}
+        })
       }
     })
 

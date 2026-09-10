@@ -49,12 +49,9 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   useEffect(() => {
     const unsub = initAuthListener((user) => {
       setCurrentUser(user)
-      if (user && onAuthSuccess) {
-        onAuthSuccess(user)
-      }
     })
     return () => unsub && unsub()
-  }, [onAuthSuccess])
+  }, [])
 
   if (!isOpen) return null
 
