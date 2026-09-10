@@ -48,7 +48,7 @@ import {
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
-import { saveProduct, deleteProductFromDb, getAllOrders, updateOrderStatus, deleteOrder } from '../lib/db'
+import { saveProduct, deleteProductFromDb, getAllOrders, updateOrderStatus, deleteOrder, uploadProductImage } from '../lib/db'
 
 // Helper to resolve clean, authentic product name, high-res image, and quantity for order items
 function resolveOrderItems(rawOrder, catalogProducts = []) {
@@ -165,10 +165,14 @@ function ImageDropzone({
     if (!file) return
     setIsProcessing(true)
     try {
+      // 1. Compress file client-side for rapid transmission
       const dataUrl = await readFileAsOptimizedDataUrl(file)
-      onChange(dataUrl)
+      // 2. Upload to Supabase Storage bucket 'product-images'
+      const cdnUrl = await uploadProductImage(dataUrl, 'cover')
+      onChange(cdnUrl)
     } catch (err) {
-      alert(err.message || 'Error processing image')
+      console.error('Error uploading image to cloud storage:', err)
+      alert('Failed to upload image to cloud storage: ' + (err.message || err))
     } finally {
       setIsProcessing(false)
     }
@@ -205,10 +209,14 @@ function ImageDropzone({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-cream truncate">
-              {value.startsWith('data:') ? 'Custom Dropped Image (Optimized Data URL)' : value}
+              {value.includes('supabase.co/storage')
+                ? 'Cloud CDN Image (Supabase Storage)'
+                : value.startsWith('data:')
+                ? 'Optimized Local Image (Will save to Cloud)'
+                : value}
             </p>
             <p className="text-[11px] text-emerald-400 mt-0.5 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Ready for Global Storefront
+              <Check className="w-3 h-3" /> Ready for Global Storefront (All Devices)
             </p>
             <div className="mt-2 flex items-center gap-3">
               <button
@@ -258,18 +266,25 @@ function ImageDropzone({
           />
           <div className="flex flex-col items-center justify-center">
             {isProcessing ? (
-              <RefreshCw className="w-7 h-7 text-gold animate-spin mb-1.5" />
+              <>
+                <RefreshCw className="w-7 h-7 text-gold animate-spin mb-1.5" />
+                <p className="text-xs font-bold text-gold animate-pulse">
+                  Uploading to Supabase Cloud Storage (Global CDN)...
+                </p>
+              </>
             ) : (
-              <Upload
-                className={`w-7 h-7 mb-1.5 transition-colors ${
-                  isDragging ? 'text-gold' : 'text-cream-muted/50'
-                }`}
-              />
+              <>
+                <Upload
+                  className={`w-7 h-7 mb-1.5 transition-colors ${
+                    isDragging ? 'text-gold' : 'text-cream-muted/50'
+                  }`}
+                />
+                <p className="text-xs font-semibold text-cream">
+                  {isDragging ? 'Drop Image File Here!' : 'Drag & Drop Image Here, or Click to Browse'}
+                </p>
+                <p className="text-[11px] text-cream-muted/50 mt-0.5">{subtext}</p>
+              </>
             )}
-            <p className="text-xs font-semibold text-cream">
-              {isDragging ? 'Drop Image File Here!' : 'Drag & Drop Image Here, or Click to Browse'}
-            </p>
-            <p className="text-[11px] text-cream-muted/50 mt-0.5">{subtext}</p>
           </div>
         </div>
       )}
@@ -309,22 +324,31 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
   const [urlInput, setUrlInput] = useState('')
   const [draggedCardIdx, setDraggedCardIdx] = useState(null)
   const [dragOverCardIdx, setDragOverCardIdx] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const fileInputRef = useRef(null)
 
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
+    setIsUploading(true)
     const newImages = []
-    for (const file of Array.from(files)) {
+    const filesArray = Array.from(files)
+    for (let i = 0; i < filesArray.length; i++) {
+      const file = filesArray[i]
+      setUploadProgress(`Uploading ${i + 1} of ${filesArray.length} to Cloud Storage...`)
       try {
         const dataUrl = await readFileAsOptimizedDataUrl(file)
-        newImages.push(dataUrl)
+        const cdnUrl = await uploadProductImage(dataUrl, 'gallery')
+        newImages.push(cdnUrl)
       } catch (err) {
-        console.error('Error processing gallery image', err)
+        console.error('Error uploading gallery image:', err)
       }
     }
     if (newImages.length > 0) {
       onUpdateGallery([...gallery, ...newImages])
     }
+    setIsUploading(false)
+    setUploadProgress('')
   }
 
   const handleDrop = (e) => {
@@ -584,8 +608,17 @@ function GalleryDropzone({ gallery = [], onUpdateGallery }) {
           onChange={(e) => handleFiles(e.target.files)}
         />
         <div className="flex items-center justify-center gap-2 text-xs font-medium text-cream">
-          <Upload className="w-4 h-4 text-gold" />
-          <span>{isDragging ? 'Drop Photos to Append to Carousel!' : 'Drag & Drop Multiple Images for Carousel, or Browse'}</span>
+          {isUploading ? (
+            <>
+              <RefreshCw className="w-4 h-4 text-gold animate-spin" />
+              <span className="text-gold font-bold">{uploadProgress || 'Uploading photos to Supabase Cloud Storage...'}</span>
+            </>
+          ) : (
+            <>
+              <Upload className="w-4 h-4 text-gold" />
+              <span>{isDragging ? 'Drop Photos to Upload & Append to Carousel!' : 'Drag & Drop Multiple Images for Carousel (Auto-Saved to Cloud CDN), or Browse'}</span>
+            </>
+          )}
         </div>
       </div>
 

@@ -25,6 +25,79 @@ const setLocalData = (key, value) => {
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
+// ── 0. CLOUD STORAGE (SUPABASE BUCKET: product-images) ──
+export async function uploadProductImage(fileOrBlobOrDataUrl, prefix = 'keychain') {
+  if (!fileOrBlobOrDataUrl) throw new Error('No image provided')
+
+  // If already a remote web URL, return it directly
+  if (
+    typeof fileOrBlobOrDataUrl === 'string' &&
+    (fileOrBlobOrDataUrl.startsWith('http://') || fileOrBlobOrDataUrl.startsWith('https://'))
+  ) {
+    return fileOrBlobOrDataUrl
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    console.warn('Supabase not configured, returning raw image data')
+    return fileOrBlobOrDataUrl
+  }
+
+  try {
+    let blob
+    let extension = 'jpg'
+    let mimeType = 'image/jpeg'
+
+    if (typeof fileOrBlobOrDataUrl === 'string' && fileOrBlobOrDataUrl.startsWith('data:')) {
+      const parts = fileOrBlobOrDataUrl.split(';base64,')
+      mimeType = parts[0].split(':')[1] || 'image/jpeg'
+      const byteCharacters = atob(parts[1])
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      blob = new Blob([byteArray], { type: mimeType })
+      const rawExt = mimeType.split('/')[1] || 'jpg'
+      extension = rawExt === 'jpeg' ? 'jpg' : rawExt
+    } else if (fileOrBlobOrDataUrl instanceof Blob || fileOrBlobOrDataUrl instanceof File) {
+      blob = fileOrBlobOrDataUrl
+      mimeType = fileOrBlobOrDataUrl.type || 'image/jpeg'
+      if (fileOrBlobOrDataUrl.name) {
+        const ext = fileOrBlobOrDataUrl.name.split('.').pop()
+        if (ext) extension = ext.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+      }
+    } else {
+      return fileOrBlobOrDataUrl
+    }
+
+    const cleanPrefix = (prefix || 'product').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    const randomSuffix = Math.random().toString(36).substring(2, 8)
+    const fileName = `${cleanPrefix}-${Date.now()}-${randomSuffix}.${extension}`
+
+    const { data, error } = await supabase.storage
+      .from('product-images')
+      .upload(fileName, blob, {
+        cacheControl: '31536000',
+        upsert: true,
+        contentType: mimeType,
+      })
+
+    if (error) {
+      console.error('Supabase storage upload error:', error)
+      throw error
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(fileName)
+
+    return publicUrl
+  } catch (err) {
+    console.error('Failed to upload image to Supabase Storage:', err)
+    throw err
+  }
+}
+
 // ── 1. PRODUCTS & CATEGORIES ──
 export async function getProducts(options = {}) {
   const { genre, includeHidden = false } = options
