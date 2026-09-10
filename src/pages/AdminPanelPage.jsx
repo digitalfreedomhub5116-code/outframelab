@@ -48,7 +48,8 @@ import {
   MessageSquare,
   Smartphone,
   Key,
-  Mail
+  Mail,
+  CreditCard
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -2409,6 +2410,20 @@ export default function AdminPanelPage() {
                               <div className="mt-1 font-mono text-xs font-semibold text-gold">
                                 ₹{order.total_amount}
                               </div>
+                              {order.razorpay_payment_id || order.payment_method === 'PREPAID' ? (
+                                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-semibold text-emerald-300" title={`Razorpay ID: ${order.razorpay_payment_id || 'Paid'}`}>
+                                  <span>💳 Paid (Razorpay)</span>
+                                </div>
+                              ) : (
+                                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-charcoal border border-charcoal-light text-[10px] text-cream-muted/70">
+                                  <span>💵 COD</span>
+                                </div>
+                              )}
+                              {order.razorpay_payment_id && (
+                                <div className="font-mono text-[9px] text-cream-muted/50 truncate max-w-[110px]" title={order.razorpay_payment_id}>
+                                  {order.razorpay_payment_id}
+                                </div>
+                              )}
                             </td>
 
                             {/* Customer Name */}
@@ -4201,6 +4216,84 @@ export default function AdminPanelPage() {
                       </>
                     )}
                   </button>
+                </div>
+              </div>
+
+              {/* Section 5: Razorpay Live Payment Gateway */}
+              <div className="rounded-xl bg-charcoal border border-gold/30 p-6 space-y-5 shadow-lg shadow-gold/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-charcoal-light pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-lg bg-gold/15 text-gold border border-gold/30">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading font-bold text-base text-cream">
+                          Razorpay Live Payment Gateway
+                        </h3>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                          LIVE PRODUCTION
+                        </span>
+                      </div>
+                      <p className="text-xs text-cream-muted/70 mt-0.5">
+                        Accepting instant payments across UPI (GPay, PhonePe, Paytm), Debit/Credit Cards & NetBanking
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://dashboard.razorpay.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/30 hover:bg-gold hover:text-obsidian transition-all text-xs font-bold flex items-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
+                  >
+                    <span>Razorpay Dashboard</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-gold" />
+                      <span>Live Key ID (Public Client Key)</span>
+                    </label>
+                    <div className="flex items-center rounded-lg bg-obsidian border border-charcoal-light px-3 py-2.5">
+                      <input
+                        type="text"
+                        readOnly
+                        value="rzp_live_TaCHL9GVg0Zcnb"
+                        className="w-full bg-transparent text-xs font-mono text-gold focus:outline-none"
+                      />
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Active
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Key Secret (Server-Side Storage)</span>
+                    </label>
+                    <div className="flex items-center rounded-lg bg-obsidian border border-charcoal-light px-3 py-2.5 justify-between">
+                      <span className="text-xs font-mono text-cream-muted/70">
+                        ••••••••••••••••••••••••
+                      </span>
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Encrypted in Supabase
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-lg bg-obsidian/70 border border-charcoal-light text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-cream-muted text-[11px]">
+                      Razorpay Checkout popup is live on the store checkout page. Upon payment, transactions are verified and marked as <strong>PAID</strong>, generating instant Gmail and WhatsApp alerts.
+                    </span>
+                  </div>
                 </div>
               </div>
 

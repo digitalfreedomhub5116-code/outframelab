@@ -390,7 +390,9 @@ export async function createOrder(orderPayload) {
     shipping_fee: orderPayload.shipping_fee || 60,
     total_amount: orderPayload.total_amount,
     payment_method: orderPayload.payment_method || 'COD',
-    payment_status: orderPayload.payment_method === 'COD' ? 'PENDING' : 'PAID',
+    payment_status: orderPayload.payment_status || (orderPayload.payment_method === 'COD' ? 'PENDING' : 'PAID'),
+    razorpay_payment_id: orderPayload.razorpay_payment_id || null,
+    razorpay_order_id: orderPayload.razorpay_order_id || null,
     status: 'CONFIRMED',
     shipment: shipmentData,
     tracking_events: initialTrackingEvents,
@@ -434,6 +436,8 @@ export async function createOrder(orderPayload) {
         total_amount: newOrder.total_amount,
         payment_method: newOrder.payment_method,
         payment_status: newOrder.payment_status,
+        razorpay_payment_id: newOrder.razorpay_payment_id,
+        razorpay_order_id: newOrder.razorpay_order_id,
         status: newOrder.status,
       }
 
@@ -1614,7 +1618,10 @@ export function formatOrderWhatsAppMessage(order) {
     : '• 1x Keychain'
 
   const total = order.total_amount || order.subtotal || 0
-  const paymentMode = order.payment_method === 'COD' ? '💵 Cash on Delivery (COD)' : '💳 Prepaid (Online Payment)'
+  const isPrepaid = order.payment_method === 'PREPAID' || !!order.razorpay_payment_id
+  const paymentMode = order.payment_method === 'COD'
+    ? '💵 Cash on Delivery (COD)'
+    : `💳 Prepaid - Razorpay Verified${order.razorpay_payment_id ? ` (Ref: ${order.razorpay_payment_id})` : ''}`
   const timeStr = new Date(order.created_at || Date.now()).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     dateStyle: 'medium',
@@ -1772,7 +1779,11 @@ export async function sendAdminOrderEmail(order) {
     // 2. Direct browser FormSubmit fallback
     const orderNum = order.order_number || 'OFL-' + Date.now().toString().slice(-4)
     const total = order.total_amount || order.subtotal || 0
-    const paymentMode = order.payment_method === 'COD' ? 'Cash on Delivery (COD)' : 'Prepaid (Online Payment)'
+    const razorpayId = order.razorpay_payment_id || order.razorpayPaymentId || ''
+    const isPrepaid = order.payment_method === 'PREPAID' || !!razorpayId
+    const paymentMode = order.payment_method === 'COD'
+      ? 'Cash on Delivery (COD)'
+      : `Prepaid (Razorpay Verified${razorpayId ? ` · Ref: ${razorpayId}` : ''})`
     const items = Array.isArray(order.items) && order.items.length > 0 ? order.items : []
     const itemsText = items.length > 0
       ? items.map((i) => `• ${i.quantity || 1}x ${i.name || i.product_name || 'Keychain'} (₹${i.price || 0})`).join('\n')
@@ -1789,7 +1800,7 @@ export async function sendAdminOrderEmail(order) {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        _subject: `🚨 NEW ORDER #${orderNum} - ₹${total} (${paymentMode.includes('COD') ? 'COD' : 'Prepaid'}) - Outframe Labs`,
+        _subject: `🚨 NEW ORDER #${orderNum} - ₹${total} (${isPrepaid ? 'PREPAID / PAID' : 'COD'}) - Outframe Labs`,
         _template: 'table',
         _captcha: 'false',
         'Order Number': orderNum,
@@ -1799,6 +1810,8 @@ export async function sendAdminOrderEmail(order) {
         'Items Ordered': itemsText,
         'Total Amount': `₹${total}`,
         'Payment Mode': paymentMode,
+        ...(razorpayId ? { 'Razorpay Payment ID': razorpayId } : {}),
+        'Payment Status': isPrepaid ? 'PAID (VERIFIED)' : 'PENDING (COD)',
         'Order Time': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         'Action - Generate AWB': adminLink,
       }),
@@ -1857,5 +1870,13 @@ export async function sendTestEmailNotification(email) {
   const json = await res.json()
   return json
 }
+
+/**
+ * Razorpay Public Live Key ID helper
+ */
+export function getRazorpayKeyId() {
+  return import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_TaCHL9GVg0Zcnb'
+}
+
 
 

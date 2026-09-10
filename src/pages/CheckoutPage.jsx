@@ -27,12 +27,29 @@ import {
   saveUserAddress,
   deleteUserAddress,
   createOrder,
+  getRazorpayKeyId,
   initAuthListener,
   signInWithGoogle,
   signInWithEmail,
   signUpWithEmail,
   logoutCustomer
 } from '../lib/db'
+
+// Helper to load Razorpay checkout script on demand
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.Razorpay) {
+      resolve(true)
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.async = true
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
+}
 
 export default function CheckoutPage() {
   const navigate = useNavigate()
@@ -377,34 +394,124 @@ export default function CheckoutPage() {
     }
 
     setIsSubmittingOrder(true)
+
+    const basePayload = {
+      user_id: currentUser?.id || null,
+      customer_name: selectedAddress.full_name,
+      customer_phone: selectedAddress.phone,
+      customer_email: currentUser?.email || '',
+      shipping_address: {
+        full_name: selectedAddress.full_name,
+        phone: selectedAddress.phone,
+        street_address: selectedAddress.street_address,
+        landmark: selectedAddress.landmark || '',
+        city: selectedAddress.city,
+        state: selectedAddress.state,
+        pincode: selectedAddress.pincode,
+        country: 'India',
+        delivery_instructions: selectedAddress.delivery_instructions || '',
+      },
+      items: items.map((i) => ({
+        product_id: i.id,
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+        image: i.image,
+      })),
+      subtotal,
+      shipping_fee: shippingFee,
+      total_amount: totalAmount,
+    }
+
+    // ── RAZORPAY PREPAID FLOW ──
+    if (paymentMethod === 'PREPAID') {
+      try {
+        const loaded = await loadRazorpayScript()
+        if (!loaded || !window.Razorpay) {
+          throw new Error('Unable to load Razorpay payment gateway. Please check your network or select Cash on Delivery.')
+        }
+
+        const razorpayKey = getRazorpayKeyId()
+        const amountPaise = Math.round(totalAmount * 100)
+
+        const options = {
+          key: razorpayKey,
+          amount: amountPaise,
+          currency: 'INR',
+          name: 'OUTFRAME LABS',
+          description: `Outframed Antique Gold Keychains (${items.reduce((s, it) => s + it.quantity, 0)} items)`,
+          image: typeof window !== 'undefined' && window.location?.origin ? `${window.location.origin}/favicon.png` : 'https://outframelabs.in/favicon.png',
+          prefill: {
+            name: selectedAddress.full_name,
+            email: currentUser?.email || '',
+            contact: selectedAddress.phone,
+          },
+          notes: {
+            shipping_city: selectedAddress.city,
+            shipping_pincode: selectedAddress.pincode,
+            order_source: 'outframelabs.in',
+          },
+          theme: {
+            color: '#CFB53B',
+            backdrop_color: 'rgba(10, 10, 10, 0.94)',
+          },
+          modal: {
+            ondismiss: () => {
+              setIsSubmittingOrder(false)
+            },
+            escape: true,
+            backdropclose: false,
+          },
+          handler: async function (response) {
+            try {
+              const paidPayload = {
+                ...basePayload,
+                payment_method: 'PREPAID',
+                payment_status: 'PAID',
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id || null,
+              }
+
+              const order = await createOrder(paidPayload)
+              useCartStore.getState().clearCart()
+              closeCart()
+              navigate(
+                `/order-confirmed?orderId=${order.order_number}&total=${totalAmount}&method=PREPAID&paymentId=${encodeURIComponent(
+                  response.razorpay_payment_id
+                )}`
+              )
+            } catch (err) {
+              console.error('Prepaid order completion error:', err)
+              setOrderError(
+                `Payment verified (#${response.razorpay_payment_id}), but order saving encountered an error. Our team has received the alert.`
+              )
+              setIsSubmittingOrder(false)
+            }
+          },
+        }
+
+        const rzp = new window.Razorpay(options)
+        rzp.on('payment.failed', function (resp) {
+          console.warn('Razorpay payment failed or cancelled:', resp.error)
+          setOrderError(resp.error?.description || 'Payment was unsuccessful or cancelled. Please try again or choose Cash on Delivery.')
+          setIsSubmittingOrder(false)
+        })
+
+        rzp.open()
+      } catch (err) {
+        console.error('Razorpay initialization error:', err)
+        setOrderError(err.message || 'Unable to open Razorpay gateway. Please try Cash on Delivery.')
+        setIsSubmittingOrder(false)
+      }
+      return
+    }
+
+    // ── CASH ON DELIVERY (COD) FLOW ──
     try {
       const orderPayload = {
-        user_id: currentUser?.id || null,
-        customer_name: selectedAddress.full_name,
-        customer_phone: selectedAddress.phone,
-        customer_email: currentUser?.email || '',
-        shipping_address: {
-          full_name: selectedAddress.full_name,
-          phone: selectedAddress.phone,
-          street_address: selectedAddress.street_address,
-          landmark: selectedAddress.landmark || '',
-          city: selectedAddress.city,
-          state: selectedAddress.state,
-          pincode: selectedAddress.pincode,
-          country: 'India',
-          delivery_instructions: selectedAddress.delivery_instructions || '',
-        },
-        items: items.map((i) => ({
-          product_id: i.id,
-          name: i.name,
-          quantity: i.quantity,
-          price: i.price,
-          image: i.image,
-        })),
-        subtotal,
-        shipping_fee: shippingFee,
-        total_amount: totalAmount,
-        payment_method: paymentMethod,
+        ...basePayload,
+        payment_method: 'COD',
+        payment_status: 'PENDING',
       }
 
       const order = await createOrder(orderPayload)
@@ -414,7 +521,7 @@ export default function CheckoutPage() {
       closeCart()
 
       // Redirect to Order Confirmed
-      navigate(`/order-confirmed?orderId=${order.order_number}&total=${totalAmount}&method=${paymentMethod}`)
+      navigate(`/order-confirmed?orderId=${order.order_number}&total=${totalAmount}&method=COD`)
     } catch (err) {
       console.error('Order placement failed:', err)
       setOrderError('Failed to place order. Please try again or choose another payment method.')
@@ -1815,12 +1922,17 @@ export default function CheckoutPage() {
                 {isSubmittingOrder ? (
                   <>
                     <RefreshCw className="h-5 w-5 text-obsidian animate-spin" />
-                    <span>Processing Order...</span>
+                    <span>{paymentMethod === 'PREPAID' ? 'Opening Razorpay Gateway...' : 'Processing Order...'}</span>
+                  </>
+                ) : paymentMethod === 'PREPAID' ? (
+                  <>
+                    <CreditCard className="h-5 w-5 text-obsidian" />
+                    <span>Pay Online with Razorpay · ₹{totalAmount}</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="h-5 w-5 text-obsidian" />
-                    <span>Confirm & Place Order · ₹{totalAmount}</span>
+                    <span>Confirm COD Order · ₹{totalAmount}</span>
                   </>
                 )}
               </button>

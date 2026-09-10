@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Check, Package, ArrowRight, ShoppingBag, Truck } from 'lucide-react'
+import { Check, Package, ArrowRight, ShoppingBag, Truck, CreditCard, ShieldCheck } from 'lucide-react'
 
 export default function OrderConfirmedPage() {
   const navigate = useNavigate()
@@ -10,6 +10,7 @@ export default function OrderConfirmedPage() {
   const orderId = searchParams.get('orderId') || 'N/A'
   const total = searchParams.get('total') || '0'
   const method = searchParams.get('method') || 'COD'
+  const paymentId = searchParams.get('paymentId') || null
 
   // Trigger the checkmark animation after a slight delay on mount
   useEffect(() => {
@@ -164,17 +165,28 @@ export default function OrderConfirmedPage() {
               {/* Divider */}
               <div className="border-t border-charcoal-light/70" />
 
-              {/* Payment Method */}
+              {/* Payment Method / Status */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-full bg-gold/15 border border-gold/30 flex items-center justify-center shrink-0">
-                    <Check className="h-4 w-4 text-gold" />
+                  <div className={`h-8 w-8 rounded-full ${paymentId ? 'bg-emerald-500/15 border-emerald-500/30' : 'bg-gold/15 border-gold/30'} border flex items-center justify-center shrink-0`}>
+                    {paymentId ? <Check className="h-4 w-4 text-emerald-400" /> : <Check className="h-4 w-4 text-gold" />}
                   </div>
-                  <span className="text-xs sm:text-sm font-semibold text-cream-muted">Payment Method</span>
+                  <span className="text-xs sm:text-sm font-semibold text-cream-muted">Payment Status</span>
                 </div>
-                <span className="text-xs sm:text-sm font-bold text-cream">
-                  {method === 'COD' ? 'Cash on Delivery' : method}
-                </span>
+                {paymentId ? (
+                  <div className="text-right">
+                    <span className="text-xs sm:text-sm font-bold text-emerald-400 block">
+                      Paid & Verified (Razorpay)
+                    </span>
+                    <span className="text-[10px] text-cream-muted/70 font-mono tracking-tight">
+                      ID: {paymentId}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs sm:text-sm font-bold text-cream">
+                    {method === 'COD' ? 'Cash on Delivery (Pay at door)' : method}
+                  </span>
+                )}
               </div>
 
               {/* Divider */}
