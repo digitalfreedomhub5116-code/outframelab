@@ -116,9 +116,16 @@ export async function getProducts(options = {}) {
         const mapped = data.map((row) => {
           const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(row.id) || m.slug === row.slug)
           const fallbackReviews = mock?.reviews || buildProductReviews(row)
-          const fallbackGallery = Array.isArray(row.gallery) && row.gallery.length > 0
-            ? row.gallery
-            : (mock?.gallery || [row.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+          const rawRowGallery = Array.isArray(row.gallery) && row.gallery.length > 0 ? row.gallery : []
+          const cleanRowGallery = rawRowGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+
+          const fallbackGallery = cleanRowGallery.length > 0
+            ? cleanRowGallery
+            : (mock?.gallery || (mock?.image ? [mock.image] : ['https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg']))
+
+          const coverImage = (row.image && !row.image.includes('photo-1618354691373-d851c5c3a990'))
+            ? row.image
+            : fallbackGallery[0] || mock?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
 
           return {
             ...mock,
@@ -130,7 +137,7 @@ export async function getProducts(options = {}) {
             genre: row.genre || mock?.genre,
             price: Number(row.price),
             originalPrice: Number(row.original_price || mock?.originalPrice || 459),
-            image: row.image || mock?.image,
+            image: coverImage,
             gallery: fallbackGallery,
             inStock: row.is_active !== false,
             isHidden: row.is_hidden === true,
@@ -227,9 +234,16 @@ export async function getProductBySlugOrId(identifier) {
       if (!error && data) {
         const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(data.id) || m.slug === data.slug)
         const fallbackReviews = mock?.reviews || buildProductReviews(data)
-        const fallbackGallery = Array.isArray(data.gallery) && data.gallery.length > 0
-          ? data.gallery
-          : (mock?.gallery || [data.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+        const rawGallery = Array.isArray(data.gallery) && data.gallery.length > 0 ? data.gallery : []
+        const cleanGallery = rawGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+
+        const fallbackGallery = cleanGallery.length > 0
+          ? cleanGallery
+          : (mock?.gallery || (mock?.image ? [mock.image] : ['https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg']))
+
+        const coverImage = (data.image && !data.image.includes('photo-1618354691373-d851c5c3a990'))
+          ? data.image
+          : fallbackGallery[0] || mock?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
 
         return {
           ...mock,
@@ -237,6 +251,7 @@ export async function getProductBySlugOrId(identifier) {
           id: Number(data.id) || data.id,
           name: data.name,
           fullName: data.full_name || `${data.name} Outframed Keychain`,
+          image: coverImage,
           gallery: fallbackGallery,
           reviews: Array.isArray(data.reviews) && data.reviews.length > 0 ? data.reviews : fallbackReviews,
           description: data.description || mock?.description || `Handcrafted antique gold ${data.name} outframed keychain.`,
@@ -260,10 +275,14 @@ export async function getProductBySlugOrId(identifier) {
 }
 
 export async function saveProduct(product) {
-  const finalGallery = Array.isArray(product.gallery) && product.gallery.length > 0
-    ? product.gallery
-    : [product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']
-  const primaryImage = finalGallery[0] || product.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+  const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(product.id) || m.slug === product.slug)
+  const defaultFallback = mock?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
+  const rawGallery = Array.isArray(product.gallery) && product.gallery.length > 0 ? product.gallery : []
+  const cleanGallery = rawGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+  const finalGallery = cleanGallery.length > 0 ? cleanGallery : [product.image || defaultFallback]
+  const primaryImage = (product.image && !product.image.includes('photo-1618354691373-d851c5c3a990'))
+    ? product.image
+    : finalGallery[0] || defaultFallback
 
   const stored = getLocalData(LOCAL_STORAGE_PRODUCTS_KEY, MOCK_PRODUCTS)
   const idx = stored.findIndex((p) => String(p.id) === String(product.id))
@@ -1341,13 +1360,30 @@ const LOCAL_STORAGE_CART_KEY = 'outframe_labs_cart'
 
 export function getLocalCart() {
   const current = getCurrentCustomer()
+  let cart = []
   if (current?.id) {
     const userCart = getLocalData(`${LOCAL_STORAGE_CART_KEY}_${current.id}`, null)
     if (userCart && Array.isArray(userCart) && userCart.length > 0) {
-      return userCart
+      cart = userCart
     }
   }
-  return getLocalData(LOCAL_STORAGE_CART_KEY, [])
+  if (cart.length === 0) {
+    cart = getLocalData(LOCAL_STORAGE_CART_KEY, [])
+  }
+  return cart.map((item) => {
+    const isShirt = typeof item.image === 'string' && item.image.includes('photo-1618354691373-d851c5c3a990')
+    if (isShirt || !item.image) {
+      const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(item.id) || m.slug === item.slug || (item.name && m.name && m.name.toLowerCase() === item.name.toLowerCase()))
+      const authenticCover = mock?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
+      const authenticGallery = mock?.gallery || [authenticCover]
+      return {
+        ...item,
+        image: authenticCover,
+        gallery: authenticGallery,
+      }
+    }
+    return item
+  })
 }
 
 export function saveLocalCart(items) {
@@ -1415,6 +1451,24 @@ export async function loadAccountCart(userId = null) {
     cached = getLocalData(LOCAL_STORAGE_CART_KEY, [])
   }
 
+  const sanitizeItems = (items) => {
+    if (!Array.isArray(items)) return []
+    return items.map((item) => {
+      const isShirt = typeof item.image === 'string' && item.image.includes('photo-1618354691373-d851c5c3a990')
+      if (isShirt || !item.image) {
+        const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(item.id) || m.slug === item.slug || (item.name && m.name && m.name.toLowerCase() === item.name.toLowerCase()))
+        const authenticCover = mock?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
+        const authenticGallery = mock?.gallery || [authenticCover]
+        return {
+          ...item,
+          image: authenticCover,
+          gallery: authenticGallery,
+        }
+      }
+      return item
+    })
+  }
+
   if (
     isSupabaseConfigured &&
     supabase &&
@@ -1429,13 +1483,15 @@ export async function loadAccountCart(userId = null) {
         .maybeSingle()
 
       if (!error && data?.cart_data && Array.isArray(data.cart_data)) {
-        if (data.cart_data.length > 0) {
-          saveLocalCart(data.cart_data)
-          setLocalData(`${LOCAL_STORAGE_CART_KEY}_${effectiveUserId}`, data.cart_data)
-          return data.cart_data
+        const sanitized = sanitizeItems(data.cart_data)
+        if (sanitized.length > 0) {
+          saveLocalCart(sanitized)
+          setLocalData(`${LOCAL_STORAGE_CART_KEY}_${effectiveUserId}`, sanitized)
+          return sanitized
         } else if (cached.length > 0) {
-          await saveCartToAccount(cached, effectiveUserId)
-          return cached
+          const sanitizedCached = sanitizeItems(cached)
+          await saveCartToAccount(sanitizedCached, effectiveUserId)
+          return sanitizedCached
         }
       }
     } catch (err) {
@@ -1443,7 +1499,7 @@ export async function loadAccountCart(userId = null) {
     }
   }
 
-  return cached
+  return sanitizeItems(cached)
 }
 
 // ── 7. USER ORDERS QUERY (List all orders for logged-in user) ──

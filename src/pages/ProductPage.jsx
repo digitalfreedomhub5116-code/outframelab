@@ -63,17 +63,19 @@ export default function ProductPage() {
           ? raw.reviews
           : (mockFallback?.reviews || buildProductReviews(raw)),
         gallery: Array.isArray(raw.gallery) && raw.gallery.length > 0
-          ? raw.gallery
-          : (mockFallback?.gallery || (raw.image ? [raw.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])),
+          ? raw.gallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+          : (mockFallback?.gallery || (raw.image && !raw.image.includes('photo-1618354691373-d851c5c3a990') ? [raw.image] : [mockFallback?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'])),
         inStock: raw.inStock !== false,
         isHidden: raw.isHidden === true,
       }
     : null
 
   const reviews = Array.isArray(product?.reviews) ? product.reviews : []
-  const gallery = Array.isArray(product?.gallery) && product.gallery.length > 0
-    ? product.gallery
-    : (product?.image ? [product.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+  const rawGallery = Array.isArray(product?.gallery) && product.gallery.length > 0 ? product.gallery : []
+  const cleanProductGallery = rawGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+  const gallery = cleanProductGallery.length > 0
+    ? cleanProductGallery
+    : (product?.image && !product.image.includes('photo-1618354691373-d851c5c3a990') ? [product.image] : [mockFallback?.image || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'])
 
   const isWishlisted = useCartStore((s) => (product ? s.isWishlisted(product.id) : false))
 

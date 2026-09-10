@@ -1,5 +1,5 @@
 import { X, Minus, Plus, ShoppingBag } from 'lucide-react'
-import { useCartStore, GENRES } from '../store/cartStore'
+import { useCartStore, GENRES, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentCustomer, initAuthListener } from '../lib/db'
@@ -8,13 +8,22 @@ import AuthModal from './AuthModal'
 function CartItem({ item }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const removeItem = useCartStore((s) => s.removeItem)
+  const products = useCartStore((s) => s.products)
   const genreData = GENRES.find((g) => g.id === item.genre)
+  const itemImage = resolveProductImage(item, products)
 
   return (
     <div className="flex gap-3.5 rounded-xl border border-charcoal-light/60 bg-charcoal/80 p-3">
       {/* Thumbnail */}
       <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gold/15 bg-obsidian">
-        <img src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image} alt={item.name} className="h-full w-full object-cover" />
+        <img
+          src={itemImage}
+          alt={item.name}
+          onError={(e) => {
+            e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
+          }}
+          className="h-full w-full object-cover"
+        />
       </div>
 
       {/* Details */}

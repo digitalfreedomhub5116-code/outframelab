@@ -85,7 +85,7 @@ function resolveOrderItems(rawOrder, catalogProducts = []) {
         product_name: 'Outframed Antique Gold Keychain',
         quantity: 1,
         price: rawOrder.total_amount || 249,
-        image: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80',
+        image: 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg',
       },
     ]
   }
@@ -111,7 +111,8 @@ function resolveOrderItems(rawOrder, catalogProducts = []) {
       properName = 'Outframed Antique Gold Keychain'
     }
 
-    const properImage = item.image || matched?.image || matched?.gallery?.[0] || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+    const cleanImg = (img) => (img && !img.includes('photo-1618354691373-d851c5c3a990') ? img : null)
+    const properImage = cleanImg(item.image) || cleanImg(matched?.image) || cleanImg(matched?.gallery?.[0]) || 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
 
     return {
       ...item,
@@ -1319,12 +1320,15 @@ export default function AdminPanelPage() {
     e.preventDefault()
     if (!editingProduct) return
 
+    const rawEditingGallery = Array.isArray(editingProduct.gallery) && editingProduct.gallery.length > 0 ? editingProduct.gallery : []
+    const cleanEditingGallery = rawEditingGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+    const defaultCover = 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
     const finalGallery =
-      editingProduct.gallery && editingProduct.gallery.length > 0
-        ? editingProduct.gallery
-        : (editingProduct.image ? [editingProduct.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'])
+      cleanEditingGallery.length > 0
+        ? cleanEditingGallery
+        : (editingProduct.image && !editingProduct.image.includes('photo-1618354691373-d851c5c3a990') ? [editingProduct.image] : [defaultCover])
 
-    const finalCover = finalGallery[0] || editingProduct.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+    const finalCover = finalGallery[0] || (editingProduct.image && !editingProduct.image.includes('photo-1618354691373-d851c5c3a990') ? editingProduct.image : defaultCover)
 
     const productPayload = {
       ...editingProduct,
@@ -1351,13 +1355,13 @@ export default function AdminPanelPage() {
     if (!newProduct.name || !newProduct.price) return
 
     const defaultCover =
-      newProduct.image ||
-      (newProduct.gallery && newProduct.gallery[0]) ||
-      'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+      (newProduct.image && !newProduct.image.includes('photo-1618354691373-d851c5c3a990') ? newProduct.image : null) ||
+      (newProduct.gallery && newProduct.gallery.find((g) => !g.includes('photo-1618354691373-d851c5c3a990'))) ||
+      'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
 
     const gallery =
       newProduct.gallery && newProduct.gallery.length > 0
-        ? newProduct.gallery
+        ? newProduct.gallery.filter((g) => !g.includes('photo-1618354691373-d851c5c3a990'))
         : [defaultCover]
 
     const productCover = gallery[0] || defaultCover
@@ -2462,9 +2466,10 @@ export default function AdminPanelPage() {
                                     item.name ||
                                     item.product_name ||
                                     'Outframed Antique Gold Keychain'
+                                  const isShirt = typeof item.image === 'string' && item.image.includes('photo-1618354691373-d851c5c3a990')
                                   const displayImg =
-                                    item.image ||
-                                    'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+                                    (!isShirt && item.image) ||
+                                    'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
                                   const qty = item.quantity || 1
                                   const price = item.price ? `₹${item.price}` : null
 

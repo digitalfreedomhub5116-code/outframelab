@@ -4,6 +4,32 @@ import { getLocalCart, saveCartToAccount, saveProduct, deleteProductFromDb } fro
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'outframe_labs_products'
 
+export const DEFAULT_FALLBACK_IMAGE = 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg'
+
+export const resolveProductImage = (item, catalog = []) => {
+  if (!item) return DEFAULT_FALLBACK_IMAGE
+  const isShirt = (url) => typeof url === 'string' && url.includes('photo-1618354691373-d851c5c3a990')
+  const clean = (url) => (url && !isShirt(url) ? url : null)
+
+  const match = catalog?.find(
+    (p) =>
+      String(p.id) === String(item.id || item.product_id) ||
+      (item.name && p.name && p.name.toLowerCase() === item.name.toLowerCase())
+  ) || MOCK_PRODUCTS.find(
+    (p) =>
+      String(p.id) === String(item.id || item.product_id) ||
+      (item.name && p.name && p.name.toLowerCase() === item.name.toLowerCase())
+  )
+
+  return (
+    clean(match?.image) ||
+    clean(match?.gallery?.[0]) ||
+    clean(Array.isArray(item.gallery) && item.gallery.find((g) => !isShirt(g))) ||
+    clean(item.image) ||
+    DEFAULT_FALLBACK_IMAGE
+  )
+}
+
 // Helper to load products from localStorage with fallback to default catalog
 const loadInitialProducts = () => {
   try {
@@ -14,13 +40,21 @@ const loadInitialProducts = () => {
         return parsed.map((p) => {
           const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(p.id) || m.slug === p.slug)
           const fallbackReviews = mock?.reviews || buildProductReviews(p)
-          const fallbackGallery = Array.isArray(p.gallery) && p.gallery.length > 0
-            ? p.gallery
-            : (mock?.gallery || (p.image ? [p.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']))
+          const rawGallery = Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery : []
+          const cleanGallery = rawGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+          const defaultFallback = mock?.image || DEFAULT_FALLBACK_IMAGE
+          const fallbackGallery = cleanGallery.length > 0
+            ? cleanGallery
+            : (mock?.gallery || (mock?.image ? [mock.image] : [defaultFallback]))
+
+          const coverImage = (p.image && !p.image.includes('photo-1618354691373-d851c5c3a990'))
+            ? p.image
+            : fallbackGallery[0] || defaultFallback
 
           return {
             ...mock,
             ...p,
+            image: coverImage,
             gallery: fallbackGallery,
             reviews: Array.isArray(p.reviews) && p.reviews.length > 0 ? p.reviews : fallbackReviews,
             description: p.description || mock?.description || `Handcrafted antique gold ${p.name} outframed keychain.`,
@@ -68,11 +102,16 @@ export const useCartStore = create((set, get) => ({
     const normalized = products.map((p) => {
       const mock = MOCK_PRODUCTS.find((m) => String(m.id) === String(p.id) || m.slug === p.slug)
       const fallbackReviews = mock?.reviews || buildProductReviews(p)
-      const fallbackGallery = Array.isArray(p.gallery) && p.gallery.length > 0
-        ? p.gallery
-        : (mock?.gallery || (p.image ? [p.image] : ['https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80']))
+      const rawGallery = Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery : []
+      const cleanGallery = rawGallery.filter((g) => g && !g.includes('photo-1618354691373-d851c5c3a990'))
+      const defaultFallback = mock?.image || DEFAULT_FALLBACK_IMAGE
+      const fallbackGallery = cleanGallery.length > 0
+        ? cleanGallery
+        : (mock?.gallery || (mock?.image ? [mock.image] : [defaultFallback]))
 
-      const coverImage = fallbackGallery[0] || p.image || mock?.image || 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+      const coverImage = (p.image && !p.image.includes('photo-1618354691373-d851c5c3a990'))
+        ? p.image
+        : fallbackGallery[0] || defaultFallback
 
       return {
         ...mock,
@@ -96,8 +135,37 @@ export const useCartStore = create((set, get) => ({
         isHidden: p.isHidden === true,
       }
     })
-    set({ products: normalized })
+
+    // Also update current items and wishlist so they immediately adopt the authentic images
+    const currentItems = get().items || []
+    const updatedItems = currentItems.map((item) => {
+      const match = normalized.find((p) => String(p.id) === String(item.id)) || MOCK_PRODUCTS.find((p) => String(p.id) === String(item.id))
+      const cleanImg = resolveProductImage(item, normalized)
+      return {
+        ...item,
+        image: cleanImg,
+        gallery: (match?.gallery && match.gallery.length > 0) ? match.gallery : [cleanImg],
+        fullName: match?.fullName || item.fullName || `${item.name} Outframed Keychain`,
+      }
+    })
+
+    const currentWishlist = get().wishlist || []
+    const updatedWishlist = currentWishlist.map((item) => {
+      const match = normalized.find((p) => String(p.id) === String(item.id)) || MOCK_PRODUCTS.find((p) => String(p.id) === String(item.id))
+      const cleanImg = resolveProductImage(item, normalized)
+      return {
+        ...item,
+        image: cleanImg,
+        gallery: (match?.gallery && match.gallery.length > 0) ? match.gallery : [cleanImg],
+        fullName: match?.fullName || item.fullName || `${item.name} Outframed Keychain`,
+      }
+    })
+
+    set({ products: normalized, items: updatedItems, wishlist: updatedWishlist })
     persistProducts(normalized)
+    if (updatedItems.length > 0) {
+      saveCartToAccount(updatedItems)
+    }
   },
 
   updateProduct: (updatedProduct) => {
@@ -191,11 +259,14 @@ export const useCartStore = create((set, get) => ({
       `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-outframed-keychain`
     const fullName = newProduct.fullName || `${cleanName} Outframed Keychain`
     const defaultCover =
-      newProduct.image ||
-      (newProduct.gallery && newProduct.gallery[0]) ||
-      'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=800&q=80'
+      (newProduct.image && !newProduct.image.includes('photo-1618354691373-d851c5c3a990') ? newProduct.image : null) ||
+      (newProduct.gallery && newProduct.gallery.find((g) => !g.includes('photo-1618354691373-d851c5c3a990'))) ||
+      DEFAULT_FALLBACK_IMAGE
 
-    const gallery = newProduct.gallery && newProduct.gallery.length > 0 ? newProduct.gallery : [defaultCover]
+    const gallery =
+      newProduct.gallery && newProduct.gallery.length > 0
+        ? newProduct.gallery.filter((g) => !g.includes('photo-1618354691373-d851c5c3a990'))
+        : [defaultCover]
     const productCover = gallery[0] || defaultCover
 
     const productWithDefaults = {
@@ -301,8 +372,20 @@ export const useCartStore = create((set, get) => ({
 
   items: getLocalCart(),
   setItems: (newItems) => {
-    set({ items: newItems })
-    saveCartToAccount(newItems)
+    if (!Array.isArray(newItems)) return
+    const catalog = get().products.length > 0 ? get().products : MOCK_PRODUCTS
+    const sanitized = newItems.map((item) => {
+      const match = catalog.find((p) => String(p.id) === String(item.id)) || MOCK_PRODUCTS.find((p) => String(p.id) === String(item.id))
+      const cleanImg = resolveProductImage(item, catalog)
+      return {
+        ...item,
+        image: cleanImg,
+        gallery: (match?.gallery && match.gallery.length > 0) ? match.gallery : (item.gallery || [cleanImg]),
+        fullName: item.fullName || match?.fullName || `${item.name} Outframed Keychain`,
+      }
+    })
+    set({ items: sanitized })
+    saveCartToAccount(sanitized)
   },
   clearCart: () => {
     set({ items: [] })
@@ -325,9 +408,20 @@ export const useCartStore = create((set, get) => ({
     if (exists) {
       set({ wishlist: get().wishlist.filter((item) => item.id !== product.id) })
     } else {
+      const catalog = get().products.length > 0 ? get().products : MOCK_PRODUCTS
+      const cleanImg = resolveProductImage(product, catalog)
+      const match = catalog.find((p) => String(p.id) === String(product.id)) || MOCK_PRODUCTS.find((p) => String(p.id) === String(product.id))
+      const cleanGallery = (match?.gallery && match.gallery.length > 0) ? match.gallery : (product.gallery || [cleanImg])
+      const cleanProduct = {
+        ...product,
+        image: cleanImg,
+        gallery: cleanGallery,
+        fullName: product.fullName || match?.fullName || `${product.name} Outframed Keychain`,
+      }
+
       // Add product & trigger glowing highlight animation on navbar heart!
       set({
-        wishlist: [...get().wishlist, product],
+        wishlist: [...get().wishlist, cleanProduct],
         wishlistPing: true,
       })
       setTimeout(() => {
@@ -355,16 +449,27 @@ export const useCartStore = create((set, get) => ({
 
   addItem: (product) => {
     if (product.inStock === false) return
+    const catalog = get().products.length > 0 ? get().products : MOCK_PRODUCTS
+    const cleanImg = resolveProductImage(product, catalog)
+    const match = catalog.find((p) => String(p.id) === String(product.id)) || MOCK_PRODUCTS.find((p) => String(p.id) === String(product.id))
+    const cleanGallery = (match?.gallery && match.gallery.length > 0) ? match.gallery : (product.gallery || [cleanImg])
+    const cleanProduct = {
+      ...product,
+      image: cleanImg,
+      gallery: cleanGallery,
+      fullName: product.fullName || match?.fullName || `${product.name} Outframed Keychain`,
+    }
+
     const existing = get().items.find((item) => item.id === product.id)
     let nextItems
     if (existing) {
       nextItems = get().items.map((item) =>
         item.id === product.id
-          ? { ...item, quantity: item.quantity + 1 }
+          ? { ...item, ...cleanProduct, quantity: item.quantity + 1 }
           : item
       )
     } else {
-      nextItems = [...get().items, { ...product, quantity: 1 }]
+      nextItems = [...get().items, { ...cleanProduct, quantity: 1 }]
     }
     set({ items: nextItems })
     saveCartToAccount(nextItems)

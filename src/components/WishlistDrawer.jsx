@@ -1,5 +1,5 @@
 import { X, Heart, ShoppingBag, Trash2 } from 'lucide-react'
-import { useCartStore } from '../store/cartStore'
+import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -7,6 +7,7 @@ export default function WishlistDrawer() {
   const isWishlistOpen = useCartStore((s) => s.isWishlistOpen)
   const closeWishlist = useCartStore((s) => s.closeWishlist)
   const wishlist = useCartStore((s) => s.wishlist)
+  const products = useCartStore((s) => s.products)
   const toggleWishlist = useCartStore((s) => s.toggleWishlist)
   const addItem = useCartStore((s) => s.addItem)
   const openCart = useCartStore((s) => s.openCart)
@@ -115,8 +116,11 @@ export default function WishlistDrawer() {
                     className="h-20 w-20 flex-shrink-0 cursor-pointer overflow-hidden rounded-xl border border-gold/15 bg-charcoal"
                   >
                     <img
-                      src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image}
+                      src={resolveProductImage(item, products)}
                       alt={item.name}
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
+                      }}
                       className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                     />
                   </div>

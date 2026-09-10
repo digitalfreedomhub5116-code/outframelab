@@ -20,7 +20,7 @@ import {
   ChevronDown,
   AlertCircle
 } from 'lucide-react'
-import { useCartStore } from '../store/cartStore'
+import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import {
   getCurrentCustomer,
   getUserAddresses,
@@ -54,6 +54,7 @@ const loadRazorpayScript = () => {
 export default function CheckoutPage() {
   const navigate = useNavigate()
   const items = useCartStore((s) => s.items)
+  const products = useCartStore((s) => s.products)
   const getTotal = useCartStore((s) => s.getTotal)
   const closeCart = useCartStore((s) => s.closeCart)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
@@ -416,7 +417,7 @@ export default function CheckoutPage() {
         name: i.name,
         quantity: i.quantity,
         price: i.price,
-        image: i.image,
+        image: resolveProductImage(i, products),
       })),
       subtotal,
       shipping_fee: shippingFee,
@@ -926,8 +927,11 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-center gap-3">
                     <img
-                      src={item.image}
+                      src={resolveProductImage(item, products)}
                       alt={item.name}
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
+                      }}
                       className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
                     />
                     <div className="flex-1 min-w-0">
@@ -1869,8 +1873,11 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-center gap-3">
                     <img
-                      src={(Array.isArray(item.gallery) && item.gallery[0]) || item.image}
+                      src={resolveProductImage(item, products)}
                       alt={item.name}
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
+                      }}
                       className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
                     />
                     <div className="flex-1 min-w-0 text-left">
@@ -1972,8 +1979,11 @@ export default function CheckoutPage() {
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-start gap-3">
                     <img
-                      src={item.image}
+                      src={resolveProductImage(item, products)}
                       alt={item.name}
+                      onError={(e) => {
+                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
+                      }}
                       className="h-16 w-16 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
                     />
                     <div className="flex-1 min-w-0">
