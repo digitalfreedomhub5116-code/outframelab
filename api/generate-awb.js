@@ -406,7 +406,7 @@ export default async function handler(req, res) {
           name: it.name || it.product_name || 'Outframed 3D Keychain',
           sku: it.sku || `OFL-KC-${it.product_id || it.id || idx + 1}`,
           units: Number(it.quantity || 1),
-          selling_price: Number(it.price || 249),
+          selling_price: Number(it.price || 299),
           discount: 0,
           tax: 0,
           hsn: 39269099, // Standard HSN code for 3D printed plastic keychains & collectables
@@ -416,7 +416,7 @@ export default async function handler(req, res) {
             name: 'Outframed Antique Gold 3D Keychain',
             sku: 'OFL-KC-01',
             units: 1,
-            selling_price: Number(order.total_amount || 249),
+            selling_price: Number(order.total_amount || 299),
             discount: 0,
             tax: 0,
             hsn: 39269099,
@@ -432,7 +432,7 @@ export default async function handler(req, res) {
 
     const orderNumber = order.order_number || `OFL-${order.id}`
     const paymentMethod = (order.payment_method || '').toUpperCase() === 'COD' ? 'COD' : 'Prepaid'
-    const totalAmount = Number(order.total_amount || order.subtotal || 249)
+    const totalAmount = Number(order.total_amount || order.subtotal || 299)
 
     const shiprocketPayload = {
       order_id: orderNumber,

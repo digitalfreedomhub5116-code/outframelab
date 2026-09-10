@@ -185,13 +185,15 @@ export default function CheckoutPage() {
 
   // Financial calculations
   const subtotal = typeof getTotal === 'function' ? getTotal() : 0
-  const shippingFee = 60
-  const totalAmount = subtotal + shippingFee
+  const shippingFee = 0 // Free Shipping on all orders
+  const convenienceFee = 14 // Small ₹14 convenience fee for order handling on all orders
+  const onlineDiscount = paymentMethod === 'PREPAID' ? 30 : 0 // Save ₹30 by paying online
+  const totalAmount = Math.max(0, subtotal + shippingFee + convenienceFee - onlineDiscount)
   const originalTotal = items.reduce(
-    (sum, item) => sum + (item.originalPrice || 459) * item.quantity,
+    (sum, item) => sum + (item.originalPrice || 599) * item.quantity,
     0
   )
-  const totalSavings = Math.max(0, originalTotal - subtotal)
+  const totalSavings = Math.max(0, originalTotal - subtotal + onlineDiscount)
   const [showMobileSummary, setShowMobileSummary] = useState(false)
 
   // Auth listener
@@ -1059,11 +1061,21 @@ export default function CheckoutPage() {
                   <span>Subtotal</span>
                   <span className="text-cream font-semibold">₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-cream-muted">
-                  <span>Pan-India Shipping</span>
-                  <span className="text-cream font-semibold">₹{shippingFee}</span>
+                <div className="flex justify-between text-cream-muted items-center">
+                  <span>Standard Shipping</span>
+                  <span className="text-emerald-400 font-bold uppercase tracking-wider text-[11px]">FREE</span>
                 </div>
-                {totalSavings > 0 && (
+                <div className="flex justify-between text-cream-muted items-center">
+                  <span>Order Handling Fee</span>
+                  <span className="text-cream font-semibold">₹{convenienceFee}</span>
+                </div>
+                {onlineDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <span>Online Payment Offer</span>
+                    <span>-₹{onlineDiscount} (Saved!)</span>
+                  </div>
+                )}
+                {totalSavings > 0 && onlineDiscount === 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
                     <span>Total Discount Savings</span>
                     <span>Save ₹{totalSavings}</span>
@@ -1797,14 +1809,17 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <CreditCard className="h-4 w-4 text-emerald-400 shrink-0" />
                     <span className="font-heading text-sm sm:text-base font-bold text-cream">
-                      UPI / Instant QR / NetBanking
+                      UPI / Instant QR / NetBanking / Cards
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      SAVE ₹30
                     </span>
                   </div>
                   <p className="text-[11px] text-cream-muted/70 mt-0.5">
-                    Fast & verified online payment via Google Pay, PhonePe, Paytm, UPI.
+                    Pay securely online and get flat ₹30 OFF instantly! (GPay, PhonePe, Paytm, Cards)
                   </p>
                 </div>
               </label>
@@ -1816,10 +1831,25 @@ export default function CheckoutPage() {
                 <span>Items Total ({items.length} keychains):</span>
                 <span className="font-mono text-cream font-semibold">₹{subtotal}</span>
               </div>
-              <div className="flex justify-between text-cream-muted">
-                <span>Pan-India Courier Dispatch:</span>
-                <span className="font-mono text-cream font-semibold">₹{shippingFee}</span>
+              <div className="flex justify-between text-cream-muted items-center">
+                <span>Standard Pan-India Shipping:</span>
+                <span className="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">FREE</span>
               </div>
+              <div className="flex justify-between text-cream-muted items-center">
+                <span>Order Handling Fee:</span>
+                <span className="font-mono text-cream font-semibold">₹{convenienceFee}</span>
+              </div>
+              {onlineDiscount > 0 ? (
+                <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1.5">
+                  <span>Online Payment Discount:</span>
+                  <span className="font-mono font-bold">-₹{onlineDiscount} (You Save ₹30!)</span>
+                </div>
+              ) : (
+                <div className="flex justify-between text-gold/80 text-[11px] bg-gold/5 border border-gold/20 rounded-lg px-2.5 py-1">
+                  <span>💡 Tip:</span>
+                  <span>Select Online Payment above to save ₹30!</span>
+                </div>
+              )}
               <div className="border-t border-charcoal-light/70 pt-2 flex justify-between items-baseline">
                 <span className="font-bold text-cream">Total Payable Amount:</span>
                 <span className="font-heading text-lg font-bold text-gold">₹{totalAmount}</span>
@@ -1977,10 +2007,20 @@ export default function CheckoutPage() {
                 <span>Items Subtotal:</span>
                 <span className="font-mono text-cream font-semibold">₹{subtotal}</span>
               </div>
-              <div className="flex justify-between text-cream-muted">
+              <div className="flex justify-between text-cream-muted items-center">
                 <span>Standard Pan-India Shipping:</span>
-                <span className="font-mono text-cream font-semibold">₹{shippingFee}</span>
+                <span className="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">FREE</span>
               </div>
+              <div className="flex justify-between text-cream-muted items-center">
+                <span>Order Handling Fee:</span>
+                <span className="font-mono text-cream font-semibold">₹{convenienceFee}</span>
+              </div>
+              {onlineDiscount > 0 && (
+                <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5">
+                  <span>Online Payment Discount:</span>
+                  <span className="font-mono font-bold">-₹{onlineDiscount} (Saved ₹30!)</span>
+                </div>
+              )}
               <div className="border-t border-charcoal-light/80 pt-3 flex justify-between items-baseline">
                 <span className="font-heading text-sm sm:text-base font-extrabold text-cream">
                   Total Payable Amount:
@@ -2117,11 +2157,21 @@ export default function CheckoutPage() {
                   <span>Subtotal</span>
                   <span className="font-semibold text-cream">₹{subtotal}</span>
                 </div>
-                <div className="flex justify-between text-cream-muted">
+                <div className="flex justify-between text-cream-muted items-center">
                   <span>Standard Pan-India Shipping</span>
-                  <span className="font-semibold text-cream">₹{shippingFee}</span>
+                  <span className="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">FREE</span>
                 </div>
-                {totalSavings > 0 && (
+                <div className="flex justify-between text-cream-muted items-center">
+                  <span>Order Handling Fee</span>
+                  <span className="font-semibold text-cream">₹{convenienceFee}</span>
+                </div>
+                {onlineDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <span>Online Payment Offer</span>
+                    <span>-₹{onlineDiscount} (Saved ₹30!)</span>
+                  </div>
+                )}
+                {totalSavings > 0 && onlineDiscount === 0 && (
                   <div className="flex justify-between text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
                     <span>Total Discount Savings</span>
                     <span>Save ₹{totalSavings}</span>

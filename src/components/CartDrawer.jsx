@@ -197,7 +197,7 @@ export default function CartDrawer() {
                 Your cart is empty
               </p>
               <p className="mt-1 text-sm text-cream-muted/40">
-                Grab an antique gold keychain at ₹189 offer.
+                Grab a handcrafted collector 3D keychain.
               </p>
               <button
                 onClick={closeCart}
@@ -228,9 +228,21 @@ export default function CartDrawer() {
             </div>
 
             {/* Shipping */}
-            <div className="mb-2 flex items-center justify-between text-xs text-cream-muted">
+            <div className="mb-1.5 flex items-center justify-between text-xs text-cream-muted">
               <span>Standard Shipping</span>
-              <span className="font-semibold text-cream">₹60</span>
+              <span className="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">FREE</span>
+            </div>
+
+            {/* Order Handling */}
+            <div className="mb-2 flex items-center justify-between text-xs text-cream-muted">
+              <span>Order Handling Fee</span>
+              <span className="font-semibold text-cream">₹14</span>
+            </div>
+
+            {/* Online Payment Discount Perk */}
+            <div className="mb-2 flex items-center justify-between text-[11px] text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg">
+              <span>⚡ Online Payment Offer:</span>
+              <span className="font-bold">Save ₹30 at checkout</span>
             </div>
 
             {totalSavings > 0 && (
@@ -242,8 +254,11 @@ export default function CartDrawer() {
 
             {/* Total */}
             <div className="mb-3 pt-2 border-t border-charcoal-light/70 flex items-center justify-between">
-              <span className="text-sm font-semibold text-cream">Estimated Total</span>
-              <span className="font-heading text-xl font-bold text-gold">₹{total + 60}</span>
+              <div>
+                <span className="text-sm font-semibold text-cream block">Estimated Total</span>
+                <span className="text-[10px] text-emerald-400 font-medium">₹{total + 14 - 30} with Online Payment</span>
+              </div>
+              <span className="font-heading text-xl font-bold text-gold">₹{total + 14}</span>
             </div>
 
             <button
