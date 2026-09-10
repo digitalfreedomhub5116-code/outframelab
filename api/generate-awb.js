@@ -409,7 +409,7 @@ export default async function handler(req, res) {
       order_id: orderNumber,
       order_date: formatShiprocketDate(order.created_at),
       pickup_location: pickupLocationId,
-      channel_id: process.env.SHIPROCKET_CHANNEL_ID || '',
+      channel_id: process.env.SHIPROCKET_CHANNEL_ID || '12100778',
       comment: 'Outframe Labs Collector Keychain Drop - Handle with Care',
       billing_customer_name: firstName,
       billing_last_name: lastName,
