@@ -105,8 +105,15 @@ export default function CartDrawer() {
       // If user just signed in while auth modal is open, auto-proceed to checkout
       if (user && isAuthOpen) {
         setIsAuthOpen(false)
+        try {
+          sessionStorage.setItem('outframe_checkout_step', '1')
+        } catch (e) {}
         closeCart()
-        navigate('/checkout')
+        if (window.location.pathname === '/checkout') {
+          window.dispatchEvent(new CustomEvent('outframe_restart_checkout'))
+        } else {
+          navigate('/checkout')
+        }
       }
     })
     return () => unsub && unsub()
@@ -236,8 +243,15 @@ export default function CartDrawer() {
                   setIsAuthOpen(true)
                   return
                 }
+                try {
+                  sessionStorage.setItem('outframe_checkout_step', '1')
+                } catch (e) {}
                 closeCart()
-                navigate('/checkout')
+                if (window.location.pathname === '/checkout') {
+                  window.dispatchEvent(new CustomEvent('outframe_restart_checkout'))
+                } else {
+                  navigate('/checkout')
+                }
               }}
               className="btn-gold w-full rounded-full py-3.5 text-sm font-bold uppercase tracking-widest cursor-pointer shadow-lg shadow-gold/20 active:scale-98"
             >
@@ -260,8 +274,15 @@ export default function CartDrawer() {
         onAuthSuccess={(user) => {
           setCurrentUser(user)
           setIsAuthOpen(false)
+          try {
+            sessionStorage.setItem('outframe_checkout_step', '1')
+          } catch (e) {}
           closeCart()
-          navigate('/checkout')
+          if (window.location.pathname === '/checkout') {
+            window.dispatchEvent(new CustomEvent('outframe_restart_checkout'))
+          } else {
+            navigate('/checkout')
+          }
         }}
       />
     </div>

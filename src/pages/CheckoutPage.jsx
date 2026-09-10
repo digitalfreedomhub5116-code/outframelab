@@ -21,6 +21,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
+import CartDrawer from '../components/CartDrawer'
 import {
   getCurrentCustomer,
   getUserAddresses,
@@ -56,6 +57,7 @@ export default function CheckoutPage() {
   const items = useCartStore((s) => s.items)
   const products = useCartStore((s) => s.products)
   const getTotal = useCartStore((s) => s.getTotal)
+  const openCart = useCartStore((s) => s.openCart)
   const closeCart = useCartStore((s) => s.closeCart)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const removeItem = useCartStore((s) => s.removeItem)
@@ -77,6 +79,29 @@ export default function CheckoutPage() {
     } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
+  // Terminate checkout session completely and return to store
+  const handleCancelCheckout = () => {
+    try {
+      sessionStorage.removeItem('outframe_checkout_step')
+    } catch (e) {}
+    setCurrentStepState(1)
+    closeCart()
+    navigate('/')
+  }
+
+  // Listen for restart checkout event (e.g. from CartDrawer Proceed to Checkout)
+  useEffect(() => {
+    const handleRestart = () => {
+      setCurrentStepState(1)
+      try {
+        sessionStorage.setItem('outframe_checkout_step', '1')
+      } catch (e) {}
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    window.addEventListener('outframe_restart_checkout', handleRestart)
+    return () => window.removeEventListener('outframe_restart_checkout', handleRestart)
+  }, [])
 
   // Auth state
   const [currentUser, setCurrentUser] = useState(() => getCurrentCustomer())
@@ -537,14 +562,22 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
         {/* Top Bar */}
         <div className="border-b border-gold/15 bg-charcoal/90 px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-gold hover:text-cream text-xs font-semibold uppercase tracking-wider">
+          <button
+            type="button"
+            onClick={handleCancelCheckout}
+            className="flex items-center gap-2 text-gold hover:text-cream text-xs font-semibold uppercase tracking-wider cursor-pointer"
+          >
             <ArrowLeft className="h-4 w-4" />
             <span>Return to Store</span>
-          </Link>
+          </button>
           <span className="font-heading text-base font-bold tracking-widest text-cream">OUTFRAME</span>
-          <Link to="/" className="text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-gold">
+          <button
+            type="button"
+            onClick={handleCancelCheckout}
+            className="text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-gold cursor-pointer"
+          >
             CANCEL
-          </Link>
+          </button>
         </div>
 
         <div className="mx-auto max-w-md text-center px-4 py-24">
@@ -555,12 +588,13 @@ export default function CheckoutPage() {
           <p className="mt-2 text-sm text-cream-muted/70">
             Please add an outframed antique gold keychain to proceed with checkout.
           </p>
-          <Link
-            to="/"
-            className="btn-gold inline-flex items-center gap-2 mt-6 rounded-full px-8 py-3.5 text-xs font-bold uppercase tracking-widest"
+          <button
+            type="button"
+            onClick={handleCancelCheckout}
+            className="btn-gold inline-flex items-center gap-2 mt-6 rounded-full px-8 py-3.5 text-xs font-bold uppercase tracking-widest cursor-pointer"
           >
             Explore Drops
-          </Link>
+          </button>
         </div>
 
         <div className="border-t border-charcoal-light py-4 text-center text-xs text-cream-muted/40">
@@ -577,14 +611,22 @@ export default function CheckoutPage() {
       <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
         {/* Top Bar */}
         <div className="border-b border-gold/15 bg-charcoal/90 px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-gold hover:text-cream text-xs font-semibold uppercase tracking-wider">
+          <button
+            type="button"
+            onClick={handleCancelCheckout}
+            className="flex items-center gap-2 text-gold hover:text-cream text-xs font-semibold uppercase tracking-wider cursor-pointer"
+          >
             <ArrowLeft className="h-4 w-4" />
             <span>Return to Store</span>
-          </Link>
+          </button>
           <span className="font-heading text-base font-bold tracking-widest text-cream">OUTFRAME</span>
-          <Link to="/" className="text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-gold">
+          <button
+            type="button"
+            onClick={handleCancelCheckout}
+            className="text-xs font-bold uppercase tracking-wider text-cream-muted hover:text-gold cursor-pointer"
+          >
             CANCEL
-          </Link>
+          </button>
         </div>
 
         <div className="mx-auto max-w-md w-full text-center px-4 py-16 flex-1 flex flex-col items-center justify-center">
@@ -743,7 +785,7 @@ export default function CheckoutPage() {
                 if (currentStep > 1) {
                   setCurrentStep(currentStep - 1)
                 } else {
-                  navigate('/')
+                  handleCancelCheckout()
                 }
               }}
               className="flex items-center gap-1.5 text-cream-muted hover:text-gold transition-colors cursor-pointer"
@@ -759,13 +801,38 @@ export default function CheckoutPage() {
               </span>
             </div>
 
-            {/* CANCEL Button (Copied exactly from Image 2) */}
-            <button
-              onClick={() => navigate('/')}
-              className="text-xs sm:text-sm font-bold tracking-wider text-cream-muted hover:text-gold uppercase transition-colors cursor-pointer"
-            >
-              CANCEL
-            </button>
+            {/* Right Actions: Cart & Cancel */}
+            <div className="flex items-center gap-3 sm:gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem('outframe_checkout_step')
+                  } catch (e) {}
+                  setCurrentStepState(1)
+                  openCart()
+                }}
+                className="group relative rounded-full p-2 text-cream-muted transition-all hover:bg-charcoal hover:text-gold cursor-pointer"
+                aria-label="View Cart"
+                title="View Cart"
+              >
+                <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />
+                {items.length > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-obsidian shadow-md shadow-gold/30">
+                    {items.reduce((sum, it) => sum + (it.quantity || 1), 0)}
+                  </span>
+                )}
+              </button>
+
+              {/* CANCEL Button */}
+              <button
+                type="button"
+                onClick={handleCancelCheckout}
+                className="text-xs sm:text-sm font-bold tracking-wider text-cream-muted hover:text-gold uppercase transition-colors cursor-pointer px-2.5 py-1 rounded-lg hover:bg-charcoal"
+              >
+                CANCEL
+              </button>
+            </div>
           </div>
 
           {/* ═════════════════════════════════════════════════════════════
@@ -2074,18 +2141,22 @@ export default function CheckoutPage() {
 
               {/* Back to store link */}
               <div className="mt-3 text-center">
-                <Link
-                  to="/"
-                  className="text-[11px] font-semibold text-cream-muted/60 hover:text-gold transition-colors inline-flex items-center gap-1"
+                <button
+                  type="button"
+                  onClick={handleCancelCheckout}
+                  className="text-[11px] font-semibold text-cream-muted/60 hover:text-gold transition-colors inline-flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="h-3 w-3" />
                   <span>Continue Shopping / Add More</span>
-                </Link>
+                </button>
               </div>
             </div>
           </aside>
         </div>
       </main>
+
+      {/* Normal Cart Drawer from the side */}
+      <CartDrawer />
     </div>
   )
 }

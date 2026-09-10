@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useCartStore } from './store/cartStore'
 import HomePage from './pages/HomePage'
@@ -14,6 +14,16 @@ import TermsPage from './pages/TermsPage'
 import ShippingPolicyPage from './pages/ShippingPolicyPage'
 
 import { initAuthListener, loadAccountCart, initProductSync } from './lib/db'
+
+function CartRouteHandler() {
+  const openCart = useCartStore((s) => s.openCart)
+  const navigate = useNavigate()
+  useEffect(() => {
+    openCart()
+    navigate('/', { replace: true })
+  }, [openCart, navigate])
+  return null
+}
 
 export default function App() {
   // Global products synchronization with Supabase & Realtime updates across devices
@@ -45,7 +55,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
-        <Route path="/cart" element={<Navigate to="/checkout" replace />} />
+        <Route path="/cart" element={<CartRouteHandler />} />
         <Route path="/order-confirmed" element={<OrderConfirmedPage />} />
         <Route path="/track-order" element={<OrderTrackingPage />} />
         <Route path="/track-order/:orderId" element={<OrderTrackingPage />} />
