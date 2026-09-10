@@ -752,6 +752,15 @@ export default function AdminPanelPage() {
   const [toast, setToast] = useState(null)
   const [generatingAwb, setGeneratingAwb] = useState({})
 
+  // Courier Partner Selection Modal State
+  const [courierModalOpen, setCourierModalOpen] = useState(false)
+  const [selectedOrderForCourier, setSelectedOrderForCourier] = useState(null)
+  const [availableCouriers, setAvailableCouriers] = useState([])
+  const [loadingCouriers, setLoadingCouriers] = useState(false)
+  const [courierError, setCourierError] = useState(null)
+  const [selectedCourierId, setSelectedCourierId] = useState(null)
+  const [isAssigningCourier, setIsAssigningCourier] = useState(false)
+
   // Automated Order Notification Settings State (Gmail + WhatsApp)
   const [notificationSettings, setNotificationSettings] = useState({
     email_enabled: true,
@@ -1250,14 +1259,68 @@ export default function AdminPanelPage() {
     }
   }
 
-  // Generate AWB for dispatch via Shiprocket API
-  const handleGenerateAwb = async (orderId) => {
-    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId)
-    if (!targetOrder) {
-      showToast('Order not found in database records.', 'error')
-      return
-    }
+  // Open Courier Selection Modal & Fetch live rates for an order
+  const handleOpenCourierModal = async (order) => {
+    if (!order) return
+    setSelectedOrderForCourier(order)
+    setCourierModalOpen(true)
+    setLoadingCouriers(true)
+    setCourierError(null)
+    setAvailableCouriers([])
+    setSelectedCourierId(null)
 
+    try {
+      const rawAddress = order.shipping_address || {}
+      const pincode = String(rawAddress.pincode || order.pincode || '').trim()
+      const isCod = (order.payment_method || '').toUpperCase() === 'COD' ? 1 : 0
+
+      if (!pincode || !/^[1-9][0-9]{5}$/.test(pincode)) {
+        throw new Error(`Customer delivery PIN code is invalid or missing ("${pincode || 'empty'}"). Please ensure the address contains a valid 6-digit postal code.`)
+      }
+
+      const res = await fetch('/api/generate-awb', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'couriers',
+          orderId: order.db_id || order.id || order.order_number,
+          orderData: order,
+          pincode,
+          cod: isCod,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to retrieve serviceable courier partners from Shiprocket.')
+      }
+
+      const couriersList = data.couriers || []
+      setAvailableCouriers(couriersList)
+
+      // Pre-select the lowest-cost courier
+      if (couriersList.length > 0) {
+        const cheapest = couriersList.find((c) => c.is_cheapest) || couriersList[0]
+        setSelectedCourierId(cheapest.courier_company_id)
+      }
+    } catch (err) {
+      console.error('Error fetching couriers:', err)
+      setCourierError(err.message || 'Unable to check courier serviceability with Shiprocket')
+    } finally {
+      setLoadingCouriers(false)
+    }
+  }
+
+  // Confirm Courier Partner Assignment & Generate AWB
+  const handleConfirmCourierAssignment = async () => {
+    if (!selectedOrderForCourier) return
+    const orderId = selectedOrderForCourier.id || selectedOrderForCourier.order_number
+    const selectedCourier = availableCouriers.find(
+      (c) => c.courier_company_id === selectedCourierId
+    )
+
+    setIsAssigningCourier(true)
     setGeneratingAwb((prev) => ({ ...prev, [orderId]: true }))
 
     try {
@@ -1265,15 +1328,17 @@ export default function AdminPanelPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orderId: targetOrder.db_id || targetOrder.id || orderId,
-          orderData: targetOrder,
+          orderId: selectedOrderForCourier.db_id || selectedOrderForCourier.id || orderId,
+          orderData: selectedOrderForCourier,
+          courierId: selectedCourierId,
+          courierName: selectedCourier?.courier_name || 'Shiprocket Logistics',
         }),
       })
 
       const data = await res.json()
 
       if (!res.ok || !data.success) {
-        const errorMsg = data.error || 'Failed to generate AWB with Shiprocket'
+        const errorMsg = data.error || 'Failed to assign courier partner on Shiprocket'
         showToast(errorMsg, 'error')
         return
       }
@@ -1286,7 +1351,7 @@ export default function AdminPanelPage() {
               ...o,
               awb_code: data.awb_code,
               status: 'Shipped',
-              courier_partner: data.courier_name || o.courier_partner || 'Delhivery Express',
+              courier_partner: data.courier_name || selectedCourier?.courier_name || o.courier_partner || 'Delhivery Surface',
               tracking_url: data.tracking_url,
               label_url: data.label_url,
             }
@@ -1296,15 +1361,29 @@ export default function AdminPanelPage() {
       )
 
       showToast(
-        `AWB Generated: ${data.awb_code} (${data.courier_name || 'Shiprocket'})`,
+        `AWB Generated: ${data.awb_code} (${data.courier_name || selectedCourier?.courier_name || 'Shiprocket'})`,
         'success'
       )
+
+      setCourierModalOpen(false)
+      setSelectedOrderForCourier(null)
     } catch (err) {
-      console.error('Error generating AWB:', err)
+      console.error('Error assigning courier AWB:', err)
       showToast(`Network error communicating with shipping service: ${err.message}`, 'error')
     } finally {
+      setIsAssigningCourier(false)
       setGeneratingAwb((prev) => ({ ...prev, [orderId]: false }))
     }
+  }
+
+  // Generate AWB backward compatibility helper
+  const handleGenerateAwb = (orderId) => {
+    const targetOrder = orders.find((o) => o.id === orderId || o.order_number === orderId || o.db_id === orderId)
+    if (!targetOrder) {
+      showToast('Order not found in database records.', 'error')
+      return
+    }
+    handleOpenCourierModal(targetOrder)
   }
 
   // Copy AWB code
@@ -2662,9 +2741,9 @@ export default function AdminPanelPage() {
                                     </span>
                                     <span className="text-cream-muted/30">·</span>
                                     <button
-                                      onClick={() => handleGenerateAwb(order.id)}
+                                      onClick={() => handleOpenCourierModal(order)}
                                       className="text-[10px] text-gold/80 hover:text-gold hover:underline cursor-pointer font-medium"
-                                      title="Re-request or regenerate AWB through Shiprocket"
+                                      title="Choose courier partner and regenerate AWB through Shiprocket"
                                     >
                                       Regenerate
                                     </button>
@@ -2682,7 +2761,7 @@ export default function AdminPanelPage() {
                               ) : (
                                 <div className="inline-flex items-center gap-2">
                                   <button
-                                    onClick={() => handleGenerateAwb(order.id)}
+                                    onClick={() => handleOpenCourierModal(order)}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/40 text-xs font-bold hover:bg-gold hover:text-obsidian transition-all shadow-[0_0_10px_rgba(207,181,59,0.1)] cursor-pointer"
                                   >
                                     <Truck className="w-3.5 h-3.5" />
@@ -2712,10 +2791,267 @@ export default function AdminPanelPage() {
                     Showing {filteredOrders.length} of {orders.length} orders
                   </span>
                   <span className="text-gold font-medium">
-                    Hub Origin: Maharashtra Hub (Pincode: 411038)
+                    Hub Origin: Satara / Karad Hub (Pincode: 415106)
                   </span>
                 </div>
               </div>
+
+              {/* ── COURIER PARTNER SELECTION MODAL ── */}
+              {courierModalOpen && selectedOrderForCourier && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/85 backdrop-blur-md overflow-hidden">
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0"
+                    onClick={() => {
+                      if (!isAssigningCourier) {
+                        setCourierModalOpen(false)
+                        setSelectedOrderForCourier(null)
+                      }
+                    }}
+                  />
+
+                  <div className="relative w-full max-w-xl max-h-[92vh] sm:max-h-[88vh] flex flex-col rounded-2xl bg-charcoal border border-charcoal-light shadow-2xl animate-fade-in-up z-10 overflow-hidden">
+                    {/* Fixed Header */}
+                    <div className="flex items-center justify-between border-b border-charcoal-light px-6 py-4 bg-charcoal shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gold/10 border border-gold/30 flex items-center justify-center text-gold">
+                          <Truck className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading font-bold text-base sm:text-lg text-cream flex items-center gap-2">
+                            <span>Select Delivery Courier Partner</span>
+                          </h3>
+                          <p className="text-xs text-cream-muted/70 mt-0.5">
+                            Order #{selectedOrderForCourier.order_number || selectedOrderForCourier.id} • {selectedOrderForCourier.customer_name || selectedOrderForCourier.shipping_address?.full_name || 'Customer'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isAssigningCourier) {
+                            setCourierModalOpen(false)
+                            setSelectedOrderForCourier(null)
+                          }
+                        }}
+                        disabled={isAssigningCourier}
+                        className="text-cream-muted hover:text-cream p-1.5 rounded-lg hover:bg-charcoal-light transition-colors cursor-pointer disabled:opacity-40"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Modal Scrollable Body */}
+                    <div className="overflow-y-auto px-6 py-5 space-y-4 flex-1 custom-scrollbar">
+                      {/* Destination Summary Card */}
+                      <div className="rounded-xl border border-charcoal-light bg-obsidian/60 p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Destination</span>
+                            <span className="text-cream font-medium block truncate">
+                              {selectedOrderForCourier.shipping_address?.city || 'City'}, {selectedOrderForCourier.shipping_address?.state || 'State'}
+                            </span>
+                            <span className="text-gold font-mono block text-[11px] font-bold">
+                              PIN: {selectedOrderForCourier.shipping_address?.pincode || selectedOrderForCourier.pincode || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Payment</span>
+                            <span className={`inline-flex items-center gap-1 font-bold mt-0.5 ${
+                              (selectedOrderForCourier.payment_method || '').toUpperCase() === 'COD'
+                                ? 'text-amber-400'
+                                : 'text-emerald-400'
+                            }`}>
+                              {(selectedOrderForCourier.payment_method || '').toUpperCase() === 'COD' ? 'COD' : 'Prepaid'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Package</span>
+                            <span className="text-cream font-medium block mt-0.5">0.10 kg (100g)</span>
+                            <span className="text-cream-muted/60 text-[10px]">10×10×5 cm</span>
+                          </div>
+                          <div>
+                            <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Pickup Hub</span>
+                            <span className="text-cream font-medium block mt-0.5">Satara / Karad</span>
+                            <span className="text-cream-muted/60 font-mono text-[10px]">PIN: 415106</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content States */}
+                      {loadingCouriers ? (
+                        <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                          <RefreshCw className="w-8 h-8 text-gold animate-spin" />
+                          <div>
+                            <p className="text-sm font-semibold text-cream">Fetching Live Freight Rates from Shiprocket...</p>
+                            <p className="text-xs text-cream-muted/60 mt-1">
+                              Checking available partners (Delhivery, Blue Dart, DTDC, Xpressbees)
+                            </p>
+                          </div>
+                        </div>
+                      ) : courierError ? (
+                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-red-300">Courier Serviceability Check Failed</p>
+                              <p className="text-xs text-red-400/80 mt-1">{courierError}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCourierModal(selectedOrderForCourier)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Retry Rate Check</span>
+                          </button>
+                        </div>
+                      ) : availableCouriers.length === 0 ? (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-center">
+                          <p className="text-sm font-semibold text-amber-300">No Courier Partners Available</p>
+                          <p className="text-xs text-amber-400/80 mt-1">
+                            Shiprocket reports no serviceable partners for pincode {selectedOrderForCourier.shipping_address?.pincode} from pickup hub 415106.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-cream uppercase tracking-wider">
+                              Available Delivery Partners ({availableCouriers.length})
+                            </span>
+                            <span className="text-[11px] text-cream-muted/60">
+                              Sorted by Lowest Freight Rate
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {availableCouriers.map((c) => {
+                              const isSelected = selectedCourierId === c.courier_company_id
+                              return (
+                                <div
+                                  key={c.courier_company_id}
+                                  onClick={() => setSelectedCourierId(c.courier_company_id)}
+                                  className={`relative rounded-xl p-3.5 border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                    isSelected
+                                      ? 'border-gold bg-gold/10 shadow-[0_0_15px_rgba(207,181,59,0.15)] ring-1 ring-gold/40'
+                                      : 'border-charcoal-light bg-charcoal hover:border-gold/30 hover:bg-charcoal-light/50'
+                                  }`}
+                                >
+                                  {/* Left: Radio & Info */}
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div
+                                      className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                        isSelected
+                                          ? 'border-gold bg-gold text-obsidian'
+                                          : 'border-cream-muted/40 bg-transparent'
+                                      }`}
+                                    >
+                                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-obsidian" />}
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-bold text-cream truncate">
+                                          {c.courier_name}
+                                        </span>
+                                        {c.is_cheapest && (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm">
+                                            <span>Cheapest • Best Value</span>
+                                          </span>
+                                        )}
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                          c.is_surface
+                                            ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                            : 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                        }`}>
+                                          {c.is_surface ? 'Surface' : 'Air Express'}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-3 text-xs text-cream-muted/70 mt-1 flex-wrap">
+                                        <span className="flex items-center gap-1">
+                                          <Clock className="w-3 h-3 text-gold/70" />
+                                          <span>Est. {c.etd || `${c.estimated_delivery_days} days`}</span>
+                                        </span>
+                                        <span>·</span>
+                                        <span className="flex items-center gap-1">
+                                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                          <span>{c.rating ? Number(c.rating).toFixed(1) : '4.0'} / 5</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Price */}
+                                  <div className="text-right shrink-0">
+                                    <div className="text-base font-extrabold text-gold font-mono flex items-center justify-end">
+                                      <IndianRupee className="w-3.5 h-3.5 mr-0.5" />
+                                      <span>{Number(c.rate).toFixed(2)}</span>
+                                    </div>
+                                    <span className="text-[10px] text-cream-muted/50 block">Freight Charge</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fixed Footer */}
+                    <div className="border-t border-charcoal-light px-6 py-4 bg-charcoal shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                      <div className="text-xs text-cream-muted/80">
+                        {selectedCourierId && (
+                          (() => {
+                            const sc = availableCouriers.find((c) => c.courier_company_id === selectedCourierId)
+                            return sc ? (
+                              <span>
+                                Selected: <strong className="text-cream">{sc.courier_name}</strong> (₹{Number(sc.rate).toFixed(2)})
+                              </span>
+                            ) : null
+                          })()
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isAssigningCourier) {
+                              setCourierModalOpen(false)
+                              setSelectedOrderForCourier(null)
+                            }
+                          }}
+                          disabled={isAssigningCourier}
+                          className="px-4 py-2 rounded-lg border border-charcoal-light text-cream-muted hover:text-cream text-xs font-bold hover:bg-charcoal-light transition-colors cursor-pointer disabled:opacity-40"
+                        >
+                          Cancel
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleConfirmCourierAssignment}
+                          disabled={isAssigningCourier || loadingCouriers || !selectedCourierId}
+                          className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-light transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isAssigningCourier ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <span>Assigning Courier & AWB...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Confirm & Assign AWB</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

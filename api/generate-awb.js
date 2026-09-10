@@ -224,6 +224,20 @@ export default async function handler(req, res) {
       }
     }
 
+    // Courier rates & serviceability check via GET
+    if (action === 'couriers' || action === 'serviceability') {
+      try {
+        const result = await handleGetCourierRates({
+          supabase,
+          query,
+          orderParam,
+        })
+        return sendJson(res, result.statusCode || (result.success ? 200 : 400), result)
+      } catch (err) {
+        return sendJson(res, 500, { success: false, error: err.message })
+      }
+    }
+
     return sendJson(res, 200, {
       success: true,
       connected: true,
@@ -273,6 +287,21 @@ export default async function handler(req, res) {
         orderId: orderId || null,
       })
       return sendJson(res, 200, result)
+    }
+
+    // Courier rates & serviceability check via POST
+    if (action === 'couriers' || action === 'serviceability') {
+      try {
+        const result = await handleGetCourierRates({
+          supabase,
+          body,
+          orderId,
+          fallbackOrderData,
+        })
+        return sendJson(res, result.statusCode || (result.success ? 200 : 400), result)
+      } catch (err) {
+        return sendJson(res, 500, { success: false, error: err.message })
+      }
     }
 
     if (!orderId && !fallbackOrderData?.id) {
@@ -481,38 +510,40 @@ export default async function handler(req, res) {
     const shiprocketOrderId = createOrderResult.order_id
     const shipmentId = createOrderResult.shipment_id
 
-    // 8. Find Lowest-Cost Courier & Assign AWB (/v1/external/courier/assign/awb)
+    // 8. Find Chosen / Lowest-Cost Courier & Assign AWB (/v1/external/courier/assign/awb)
     let awbCode = createOrderResult.awb_code || null
-    let courierName = createOrderResult.courier_name || 'Delhivery Surface'
-    let selectedCourierId = null
+    let courierName = body.courierName || body.courier_name || createOrderResult.courier_name || 'Delhivery Surface'
+    let selectedCourierId = body.courierId || body.courier_id || null
 
     if (!awbCode) {
-      // Automatically find the cheapest available courier for this route to save shipping cost
-      try {
-        const isCod = paymentMethod === 'COD' ? 1 : 0
-        const serviceRes = await fetch(
-          `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=415106&delivery_postcode=${rawPincode}&weight=0.1&cod=${isCod}`,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${shiprocketToken}`,
-            },
+      // Automatically find the cheapest available courier if not explicitly chosen by admin
+      if (!selectedCourierId) {
+        try {
+          const isCod = paymentMethod === 'COD' ? 1 : 0
+          const serviceRes = await fetch(
+            `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=415106&delivery_postcode=${rawPincode}&weight=0.1&cod=${isCod}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${shiprocketToken}`,
+              },
+            }
+          )
+          const serviceData = await serviceRes.json()
+          const availableCouriers = serviceData?.data?.available_courier_companies || []
+          if (availableCouriers.length > 0) {
+            availableCouriers.sort((a, b) => Number(a.rate || 999) - Number(b.rate || 999))
+            selectedCourierId = availableCouriers[0].courier_company_id
+            courierName = availableCouriers[0].courier_name || courierName
           }
-        )
-        const serviceData = await serviceRes.json()
-        const availableCouriers = serviceData?.data?.available_courier_companies || []
-        if (availableCouriers.length > 0) {
-          availableCouriers.sort((a, b) => Number(a.rate || 999) - Number(b.rate || 999))
-          selectedCourierId = availableCouriers[0].courier_company_id
-          courierName = availableCouriers[0].courier_name || courierName
+        } catch (err) {
+          console.warn('Notice: Could not query lowest-cost courier serviceability:', err)
         }
-      } catch (err) {
-        console.warn('Notice: Could not query lowest-cost courier serviceability:', err)
       }
 
       const assignPayload = { shipment_id: shipmentId }
       if (selectedCourierId) {
-        assignPayload.courier_id = selectedCourierId
+        assignPayload.courier_id = Number(selectedCourierId)
       }
 
       const assignAwbResponse = await fetch(
@@ -1051,5 +1082,139 @@ async function handleSyncOrders({ supabase, orderId }) {
     checked_count: ordersToCheck.length,
     updated_cancellations: updatedCancellations,
     timestamp: nowIso,
+  }
+}
+
+/**
+ * Query available Shiprocket courier partners, live freight rates, and ETDs for an order destination
+ */
+async function handleGetCourierRates({
+  supabase,
+  query = {},
+  body = {},
+  orderId = null,
+  orderParam = null,
+  fallbackOrderData = null,
+}) {
+  const token = await getShiprocketAuthToken()
+  if (!token) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: 'Shiprocket is not connected: Missing API credentials.',
+    }
+  }
+
+  let rawPincode =
+    query.pincode ||
+    query.delivery_postcode ||
+    body.pincode ||
+    body.delivery_postcode ||
+    ''
+  let isCod =
+    query.cod === '1' ||
+    query.cod === 1 ||
+    body.cod === 1 ||
+    body.cod === '1' ||
+    String(body.paymentMethod || query.paymentMethod || body.payment_method || '').toUpperCase() === 'COD'
+      ? 1
+      : 0
+
+  let targetOrder = null
+  const targetId = orderParam || orderId || body.orderId || body.order_id
+
+  if ((!rawPincode || isCod === undefined) && (targetId || fallbackOrderData)) {
+    if (supabase && targetId) {
+      try {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)
+        let q = supabase.from('orders').select('*, shipments(*)')
+        if (isUUID) {
+          q = q.or(`id.eq.${targetId},order_number.eq.${targetId}`)
+        } else {
+          q = q.eq('order_number', targetId)
+        }
+        const { data: ord } = await q.maybeSingle()
+        targetOrder = ord
+      } catch (err) {
+        console.warn('Could not query order for couriers:', err)
+      }
+    }
+    if (!targetOrder && fallbackOrderData) {
+      targetOrder = fallbackOrderData
+    }
+
+    if (targetOrder) {
+      const rawAddress = targetOrder.shipping_address || {}
+      rawPincode = rawPincode || rawAddress.pincode || targetOrder.pincode
+      if (isCod === undefined || isCod === 0) {
+        isCod = (targetOrder.payment_method || '').toUpperCase() === 'COD' ? 1 : 0
+      }
+    }
+  }
+
+  rawPincode = String(rawPincode || '').trim()
+  if (!rawPincode || !/^[1-9][0-9]{5}$/.test(rawPincode)) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: `Invalid or missing destination PIN code (${rawPincode || 'empty'}). Indian postal codes must be exactly 6 digits.`,
+    }
+  }
+
+  const pickupPostcode = process.env.PICKUP_POSTCODE || '415106'
+  const weight = query.weight || body.weight || 0.1
+
+  const serviceUrl = `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=${pickupPostcode}&delivery_postcode=${rawPincode}&weight=${weight}&cod=${isCod}`
+
+  const serviceRes = await fetch(serviceUrl, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const serviceData = await serviceRes.json()
+  const rawCouriers = serviceData?.data?.available_courier_companies || []
+
+  if (!serviceRes.ok || rawCouriers.length === 0) {
+    return {
+      success: false,
+      statusCode: 422,
+      error: `No courier partners service pincode ${rawPincode} from pickup hub (${pickupPostcode}).`,
+      raw: serviceData,
+    }
+  }
+
+  // Sort by freight charge / rate ascending (cheapest first)
+  const couriers = rawCouriers
+    .map((c) => ({
+      courier_company_id: c.courier_company_id,
+      courier_name: c.courier_name,
+      rate: Number(c.rate || c.freight_charge || 0),
+      freight_charge: Number(c.freight_charge || c.rate || 0),
+      estimated_delivery_days: c.estimated_delivery_days || '3-5',
+      etd: c.etd || '',
+      rating: Number(c.rating || 4.0),
+      is_surface: Boolean(c.is_surface || String(c.courier_name || '').toLowerCase().includes('surface')),
+      call_before_delivery: c.call_before_delivery || 'Available',
+      realtime_tracking: c.realtime_tracking || 'Real Time',
+      city: c.city || targetOrder?.shipping_address?.city || '',
+      state: c.state || targetOrder?.shipping_address?.state || '',
+    }))
+    .sort((a, b) => a.rate - b.rate)
+
+  if (couriers.length > 0) {
+    couriers[0].is_cheapest = true
+  }
+
+  return {
+    success: true,
+    statusCode: 200,
+    pickup_postcode: pickupPostcode,
+    delivery_postcode: rawPincode,
+    city: targetOrder?.shipping_address?.city || rawCouriers[0]?.city || '',
+    state: targetOrder?.shipping_address?.state || rawCouriers[0]?.state || '',
+    payment_method: isCod ? 'COD' : 'Prepaid',
+    couriers,
   }
 }
