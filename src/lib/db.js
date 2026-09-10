@@ -519,8 +519,11 @@ export async function createOrder(orderPayload) {
   const existingOrders = getLocalData(LOCAL_STORAGE_ORDERS_KEY, [])
   setLocalData(LOCAL_STORAGE_ORDERS_KEY, [newOrder, ...existingOrders])
 
-  // 3. Automated WhatsApp Order Notification to Admin (+91 8530085116)
+  // 3. Automated Notifications to Admin (Instant Email to Gmail + WhatsApp)
   // 100% automated in the background — zero customer delay or friction
+  sendAdminOrderEmail(newOrder).catch((err) => {
+    console.warn('[Email Notification] Background dispatch error:', err)
+  })
   sendAdminOrderNotification(newOrder).catch((err) => {
     console.warn('[WhatsApp Notification] Background dispatch error:', err)
   })
@@ -1506,15 +1509,18 @@ export async function getUserOrders(user = null) {
   )
 }
 
-// ── 8. AUTOMATED ADMIN WHATSAPP NOTIFICATIONS ──
+// ── 8. AUTOMATED ADMIN NOTIFICATIONS (INSTANT GMAIL & WHATSAPP) ──
 const LOCAL_STORAGE_NOTIFICATION_SETTINGS_KEY = 'outframe_admin_notification_settings'
 export const DEFAULT_ADMIN_WHATSAPP = '918530085116'
+export const DEFAULT_ADMIN_EMAIL = 'krishnavalostore@gmail.com'
 
 /**
- * Fetch Admin WhatsApp Notification Settings from Supabase admin_settings table or localStorage
+ * Fetch Admin Notification Settings from Supabase admin_settings table or localStorage
  */
 export async function getAdminNotificationSettings() {
   const fallback = {
+    email_enabled: true,
+    admin_email: DEFAULT_ADMIN_EMAIL,
     whatsapp_enabled: true,
     whatsapp_phone: DEFAULT_ADMIN_WHATSAPP,
     callmebot_api_key: '',
@@ -1533,6 +1539,8 @@ export async function getAdminNotificationSettings() {
 
       if (!error && data) {
         current = {
+          email_enabled: data.email_enabled ?? true,
+          admin_email: data.admin_email || DEFAULT_ADMIN_EMAIL,
           whatsapp_enabled: data.whatsapp_enabled ?? true,
           whatsapp_phone: data.whatsapp_phone || DEFAULT_ADMIN_WHATSAPP,
           callmebot_api_key: data.callmebot_api_key || '',
@@ -1548,13 +1556,16 @@ export async function getAdminNotificationSettings() {
 }
 
 /**
- * Save Admin WhatsApp Notification Settings to Supabase and localStorage
+ * Save Admin Notification Settings to Supabase and localStorage
  */
 export async function saveAdminNotificationSettings(newSettings) {
   const rawPhone = String(newSettings.whatsapp_phone || DEFAULT_ADMIN_WHATSAPP).replace(/[^0-9]/g, '')
   const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone.startsWith('0') && rawPhone.length === 11 ? `91${rawPhone.slice(1)}` : rawPhone
+  const cleanEmail = String(newSettings.admin_email || DEFAULT_ADMIN_EMAIL).trim()
 
   const payload = {
+    email_enabled: newSettings.email_enabled ?? true,
+    admin_email: cleanEmail || DEFAULT_ADMIN_EMAIL,
     whatsapp_enabled: newSettings.whatsapp_enabled ?? true,
     whatsapp_phone: cleanPhone || DEFAULT_ADMIN_WHATSAPP,
     callmebot_api_key: String(newSettings.callmebot_api_key || '').trim(),
@@ -1570,6 +1581,8 @@ export async function saveAdminNotificationSettings(newSettings) {
         .from('admin_settings')
         .upsert({
           id: 'default',
+          email_enabled: payload.email_enabled,
+          admin_email: payload.admin_email,
           whatsapp_enabled: payload.whatsapp_enabled,
           whatsapp_phone: payload.whatsapp_phone,
           callmebot_api_key: payload.callmebot_api_key,
@@ -1721,4 +1734,128 @@ export async function sendTestWhatsAppNotification(phone, apiKey) {
 
   return json
 }
+
+/**
+ * 100% Automated instant notification email to admin's Gmail on order placement.
+ * Runs in the background without any customer delay or friction.
+ */
+export async function sendAdminOrderEmail(order) {
+  try {
+    const settings = await getAdminNotificationSettings()
+    if (settings.email_enabled === false) {
+      console.log('[Order Email] Email notifications are disabled in settings.')
+      return { success: false, reason: 'disabled' }
+    }
+
+    const targetEmail = (settings.admin_email || DEFAULT_ADMIN_EMAIL).trim()
+    if (!targetEmail) return { success: false, reason: 'no_email' }
+
+    // 1. Try Supabase Edge Function first (server-side, avoids CORS, formats HTML)
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.functions.invoke('send-order-email', {
+          body: {
+            toEmail: targetEmail,
+            order: order,
+          },
+        })
+
+        if (!error && (data?.success || data?.result?.success)) {
+          console.log(`[Order Email] Successfully sent alert to ${targetEmail} via Supabase Edge Function`)
+          return { success: true, via: 'edge_function', data }
+        }
+      } catch (e) {
+        console.warn('[Order Email] Edge function invocation error, falling back to direct:', e)
+      }
+    }
+
+    // 2. Direct browser FormSubmit fallback
+    const orderNum = order.order_number || 'OFL-' + Date.now().toString().slice(-4)
+    const total = order.total_amount || order.subtotal || 0
+    const paymentMode = order.payment_method === 'COD' ? 'Cash on Delivery (COD)' : 'Prepaid (Online Payment)'
+    const items = Array.isArray(order.items) && order.items.length > 0 ? order.items : []
+    const itemsText = items.length > 0
+      ? items.map((i) => `• ${i.quantity || 1}x ${i.name || i.product_name || 'Keychain'} (₹${i.price || 0})`).join('\n')
+      : '• 1x Keychain'
+    const addr = order.shipping_address || {}
+    const fullAddr = [addr.address_line, addr.landmark, addr.city, addr.state, addr.pincode].filter(Boolean).join(', ')
+    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://outframelabs.com'
+    const adminLink = `${origin}/admin-panel-access?tab=orders&search=${encodeURIComponent(orderNum)}`
+
+    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(targetEmail)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        _subject: `🚨 NEW ORDER #${orderNum} - ₹${total} (${paymentMode.includes('COD') ? 'COD' : 'Prepaid'}) - Outframe Labs`,
+        _template: 'table',
+        _captcha: 'false',
+        'Order Number': orderNum,
+        'Customer Name': order.customer_name || 'Valued Customer',
+        'Customer Phone': order.customer_phone || 'N/A',
+        'Delivery Address': fullAddr || 'See Admin Panel',
+        'Items Ordered': itemsText,
+        'Total Amount': `₹${total}`,
+        'Payment Mode': paymentMode,
+        'Order Time': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        'Action - Generate AWB': adminLink,
+      }),
+    })
+
+    const json = await res.json()
+    console.log(`[Order Email] Dispatched to ${targetEmail} via FormSubmit`, json)
+    return { success: json?.success === 'true' || json?.success === true, result: json }
+  } catch (err) {
+    console.error('[Order Email] Error dispatching email notification:', err)
+    return { success: false, error: err }
+  }
+}
+
+/**
+ * Send a live test order alert email to verify the admin Gmail inbox
+ */
+export async function sendTestEmailNotification(email) {
+  const targetEmail = (email || DEFAULT_ADMIN_EMAIL).trim()
+  if (!targetEmail) {
+    throw new Error('Please enter a valid recipient email address.')
+  }
+
+  const testOrder = {
+    order_number: 'OFL-2026-TEST',
+    customer_name: 'Aditya Roy (Test Customer)',
+    customer_phone: '8530085116',
+    shipping_address: {
+      address_line: 'Flat 402, Royal Palms, Palm Beach Road',
+      landmark: 'Near Oberoi Mall',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      pincode: '400063',
+    },
+    items: [
+      { name: 'Porsche 911 GT3 RS Antique Gold Keychain', quantity: 1, price: 499 },
+      { name: 'BMW M Heritage Keychain', quantity: 1, price: 499 },
+    ],
+    subtotal: 998,
+    shipping_fee: 0,
+    total_amount: 998,
+    payment_method: 'COD',
+    created_at: new Date().toISOString(),
+  }
+
+  const edgeUrl = 'https://sooedjbqgrdjtwiobjpr.supabase.co/functions/v1/send-order-email'
+  const res = await fetch(edgeUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      toEmail: targetEmail,
+      order: testOrder,
+    }),
+  })
+
+  const json = await res.json()
+  return json
+}
+
 

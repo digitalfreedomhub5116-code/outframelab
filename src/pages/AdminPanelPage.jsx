@@ -47,8 +47,8 @@ import {
   Lock,
   MessageSquare,
   Smartphone,
-  Send,
-  Key
+  Key,
+  Mail
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -62,7 +62,9 @@ import {
   getAdminNotificationSettings,
   saveAdminNotificationSettings,
   sendTestWhatsAppNotification,
-  DEFAULT_ADMIN_WHATSAPP
+  sendTestEmailNotification,
+  DEFAULT_ADMIN_WHATSAPP,
+  DEFAULT_ADMIN_EMAIL
 } from '../lib/db'
 
 // Helper to resolve clean, authentic product name, high-res image, and quantity for order items
@@ -748,13 +750,17 @@ export default function AdminPanelPage() {
   const [toast, setToast] = useState(null)
   const [generatingAwb, setGeneratingAwb] = useState({})
 
-  // Automated WhatsApp Notification Settings State
-  const [whatsappSettings, setWhatsappSettings] = useState({
+  // Automated Order Notification Settings State (Gmail + WhatsApp)
+  const [notificationSettings, setNotificationSettings] = useState({
+    email_enabled: true,
+    admin_email: 'krishnavalostore@gmail.com',
     whatsapp_enabled: true,
     whatsapp_phone: '8530085116',
     callmebot_api_key: '',
   })
-  const [isSavingWhatsapp, setIsSavingWhatsapp] = useState(false)
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false)
+  const [isTestingEmail, setIsTestingEmail] = useState(false)
+  const [emailTestResult, setEmailTestResult] = useState(null)
   const [isTestingWhatsapp, setIsTestingWhatsapp] = useState(false)
   const [whatsappTestResult, setWhatsappTestResult] = useState(null)
 
@@ -819,12 +825,14 @@ export default function AdminPanelPage() {
       .catch(() => setShiprocketConnected(false))
   }, [isAuthenticated])
 
-  // Load WhatsApp notification settings from Supabase / localStorage
+  // Load order notification settings from Supabase / localStorage
   useEffect(() => {
     if (!isAuthenticated) return
     getAdminNotificationSettings().then((cfg) => {
       if (cfg) {
-        setWhatsappSettings({
+        setNotificationSettings({
+          email_enabled: cfg.email_enabled ?? true,
+          admin_email: cfg.admin_email || DEFAULT_ADMIN_EMAIL,
           whatsapp_enabled: cfg.whatsapp_enabled ?? true,
           whatsapp_phone: cfg.whatsapp_phone?.replace(/^91/, '') || '8530085116',
           callmebot_api_key: cfg.callmebot_api_key || '',
@@ -833,25 +841,66 @@ export default function AdminPanelPage() {
     })
   }, [isAuthenticated])
 
-  const handleSaveWhatsappSettings = async () => {
-    setIsSavingWhatsapp(true)
+  const handleSaveNotificationSettings = async () => {
+    setIsSavingNotifications(true)
+    setEmailTestResult(null)
     setWhatsappTestResult(null)
     try {
       await saveAdminNotificationSettings({
-        whatsapp_enabled: whatsappSettings.whatsapp_enabled,
-        whatsapp_phone: whatsappSettings.whatsapp_phone,
-        callmebot_api_key: whatsappSettings.callmebot_api_key,
+        email_enabled: notificationSettings.email_enabled,
+        admin_email: notificationSettings.admin_email,
+        whatsapp_enabled: notificationSettings.whatsapp_enabled,
+        whatsapp_phone: notificationSettings.whatsapp_phone,
+        callmebot_api_key: notificationSettings.callmebot_api_key,
       })
-      showToast('WhatsApp notification configurations saved successfully!', 'success')
+      showToast('Order Alert configurations saved successfully!', 'success')
     } catch (err) {
-      showToast('Failed to save WhatsApp settings: ' + err.message, 'error')
+      showToast('Failed to save settings: ' + err.message, 'error')
     } finally {
-      setIsSavingWhatsapp(false)
+      setIsSavingNotifications(false)
+    }
+  }
+
+  const handleTestEmailNotification = async () => {
+    if (!notificationSettings.admin_email?.trim()) {
+      showToast('Please enter an email address before sending test alert.', 'error')
+      return
+    }
+    setIsTestingEmail(true)
+    setEmailTestResult(null)
+    try {
+      const res = await sendTestEmailNotification(notificationSettings.admin_email)
+      if (res?.success || res?.result?.success === 'true') {
+        setEmailTestResult({
+          type: 'success',
+          message: `Test order email sent to ${notificationSettings.admin_email}! Check your Gmail inbox now.`,
+        })
+        showToast('Test order email sent!', 'success')
+      } else if (res?.message?.includes('Activation')) {
+        setEmailTestResult({
+          type: 'activation',
+          message: `Activation email sent to ${notificationSettings.admin_email}! Please open your Gmail and click "Activate Form" once. After activating, all orders will arrive in your inbox instantly!`,
+        })
+        showToast('Activation email sent! Please check your Gmail.', 'info')
+      } else {
+        setEmailTestResult({
+          type: 'error',
+          message: res?.message || 'Failed to dispatch test email. Please check your email address.',
+        })
+      }
+    } catch (err) {
+      setEmailTestResult({
+        type: 'error',
+        message: err.message || 'Error sending test email alert.',
+      })
+      showToast('Email test failed: ' + (err.message || 'Error'), 'error')
+    } finally {
+      setIsTestingEmail(false)
     }
   }
 
   const handleTestWhatsappNotification = async () => {
-    if (!whatsappSettings.callmebot_api_key?.trim()) {
+    if (!notificationSettings.callmebot_api_key?.trim()) {
       showToast('Please enter your CallMeBot API Key before testing.', 'error')
       return
     }
@@ -859,12 +908,12 @@ export default function AdminPanelPage() {
     setWhatsappTestResult(null)
     try {
       await sendTestWhatsAppNotification(
-        whatsappSettings.whatsapp_phone,
-        whatsappSettings.callmebot_api_key
+        notificationSettings.whatsapp_phone,
+        notificationSettings.callmebot_api_key
       )
       setWhatsappTestResult({
         type: 'success',
-        message: `Test alert sent successfully to +91 ${whatsappSettings.whatsapp_phone}! Check your phone.`,
+        message: `Test alert sent successfully to +91 ${notificationSettings.whatsapp_phone}! Check your phone.`,
       })
       showToast('Test WhatsApp message delivered!', 'success')
     } catch (err) {
@@ -3851,213 +3900,308 @@ export default function AdminPanelPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {whatsappSettings.callmebot_api_key ? (
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Ready & Connected</span>
-                      </span>
-                    ) : (
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 shadow-sm">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                        <span>API Key Setup Required</span>
-                      </span>
-                    )}
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Gmail Alerts Active</span>
+                    </span>
                   </div>
                 </div>
 
-                {/* Master Switch */}
-                <div className="flex items-center justify-between p-4 rounded-lg bg-obsidian border border-charcoal-light">
-                  <div>
-                    <span className="text-xs font-semibold text-cream block">
-                      Enable Automated WhatsApp Order Notifications
-                    </span>
-                    <span className="text-[11px] text-cream-muted/60">
-                      When enabled, orders placed on Outframe Labs will instantly alert your WhatsApp number in the background without any customer friction
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setWhatsappSettings({
-                        ...whatsappSettings,
-                        whatsapp_enabled: !whatsappSettings.whatsapp_enabled,
-                      })
-                    }
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      whatsappSettings.whatsapp_enabled ? 'bg-emerald-500' : 'bg-charcoal-light'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
-                        whatsappSettings.whatsapp_enabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
+                {/* ── CARD A: INSTANT GMAIL ORDER NOTIFICATIONS (METHOD 3) ── */}
+                <div className="p-5 rounded-xl bg-obsidian border border-blue-500/20 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-charcoal-light pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-cream flex items-center gap-2">
+                          <span>Instant Gmail Push Alerts</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            100% Reliable
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-cream-muted/70">
+                          Rings & vibrates on your phone via the Gmail app within 1-2 seconds with 1-click AWB action link
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Settings Input Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Admin WhatsApp Phone Number</span>
-                    </label>
-                    <div className="flex items-center rounded-lg bg-obsidian border border-charcoal-light focus-within:border-emerald-500/50 overflow-hidden">
-                      <span className="px-3 py-2.5 bg-charcoal/50 text-xs font-mono font-bold text-cream-muted border-r border-charcoal-light">
-                        +91
-                      </span>
-                      <input
-                        type="text"
-                        value={whatsappSettings.whatsapp_phone}
-                        onChange={(e) =>
-                          setWhatsappSettings({
-                            ...whatsappSettings,
-                            whatsapp_phone: e.target.value.replace(/[^0-9]/g, ''),
+                    {/* Email Toggle */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-cream-muted font-medium">Alerts:</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            email_enabled: !notificationSettings.email_enabled,
                           })
                         }
-                        placeholder="8530085116"
-                        className="w-full px-3 py-2.5 bg-transparent text-sm font-mono text-cream focus:outline-none"
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          notificationSettings.email_enabled ? 'bg-blue-500' : 'bg-charcoal-light'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            notificationSettings.email_enabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Email Input & Send Test */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Admin Recipient Gmail Address</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={notificationSettings.admin_email}
+                        onChange={(e) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            admin_email: e.target.value.trim(),
+                          })
+                        }
+                        placeholder="krishnavalostore@gmail.com"
+                        className="w-full px-3.5 py-2.5 rounded-lg bg-charcoal border border-charcoal-light text-sm font-mono text-cream focus:outline-none focus:border-blue-400"
+                      />
+                      <p className="text-[11px] text-cream-muted/50 mt-1">
+                        Prefilled: krishnavalostore@gmail.com (receives all order alerts)
+                      </p>
+                    </div>
+
+                    <div>
+                      <button
+                        type="button"
+                        disabled={isTestingEmail || !notificationSettings.admin_email}
+                        onClick={handleTestEmailNotification}
+                        className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all shadow-md hover:scale-[1.02] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {isTestingEmail ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Sending Email...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Send Test Alert to Gmail</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 1-Time Activation Notice */}
+                  <div className="p-3.5 rounded-lg bg-charcoal/70 border border-charcoal-light text-xs space-y-1.5">
+                    <div className="flex items-center gap-2 text-gold font-semibold text-[11px]">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>One-Time Gmail Activation (Takes 5 Seconds)</span>
+                    </div>
+                    <p className="text-cream-muted/70 text-[11px] leading-relaxed">
+                      If you haven't received an alert yet, check your Gmail inbox (or Spam/Promotions folder) for an email from <strong>FormSubmit</strong> with subject <em>"Action Required: Confirm Form"</em>. Simply click <strong>"Activate Form"</strong> once. Every customer order will then immediately land in your inbox!
+                    </p>
+                  </div>
+
+                  {/* Email Test Result Callout */}
+                  {emailTestResult && (
+                    <div
+                      className={`p-3.5 rounded-lg text-xs border ${
+                        emailTestResult.type === 'success'
+                          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                          : emailTestResult.type === 'activation'
+                          ? 'bg-blue-950/40 border-blue-500/40 text-blue-200'
+                          : 'bg-red-950/40 border-red-500/40 text-red-200'
+                      } flex items-start gap-2.5`}
+                    >
+                      {emailTestResult.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : emailTestResult.type === 'activation' ? (
+                        <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-bold">
+                          {emailTestResult.type === 'success'
+                            ? 'Email Alert Sent!'
+                            : emailTestResult.type === 'activation'
+                            ? 'Action Required in Gmail:'
+                            : 'Delivery Error:'}
+                        </p>
+                        <p className="mt-0.5 opacity-90 leading-relaxed">{emailTestResult.message}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── CARD B: WHATSAPP ORDER ALERTS (CALLMEBOT) ── */}
+                <div className="p-5 rounded-xl bg-obsidian/70 border border-charcoal-light space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-charcoal-light pb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-cream flex items-center gap-2">
+                          <span>WhatsApp Order Alerts</span>
+                          <span className="text-[10px] text-cream-muted/60 font-normal">CallMeBot Gateway</span>
+                        </h4>
+                        <p className="text-[11px] text-cream-muted/70">
+                          Automated WhatsApp messages sent to +91 {notificationSettings.whatsapp_phone}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-cream-muted font-medium">Alerts:</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            whatsapp_enabled: !notificationSettings.whatsapp_enabled,
+                          })
+                        }
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          notificationSettings.whatsapp_enabled ? 'bg-emerald-500' : 'bg-charcoal-light'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-obsidian shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            notificationSettings.whatsapp_enabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                        <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Admin WhatsApp Phone Number</span>
+                      </label>
+                      <div className="flex items-center rounded-lg bg-charcoal border border-charcoal-light overflow-hidden">
+                        <span className="px-3 py-2 bg-obsidian text-xs font-mono font-bold text-cream-muted border-r border-charcoal-light">
+                          +91
+                        </span>
+                        <input
+                          type="text"
+                          value={notificationSettings.whatsapp_phone}
+                          onChange={(e) =>
+                            setNotificationSettings({
+                              ...notificationSettings,
+                              whatsapp_phone: e.target.value.replace(/[^0-9]/g, ''),
+                            })
+                          }
+                          placeholder="8530085116"
+                          className="w-full px-3 py-2 bg-transparent text-sm font-mono text-cream focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5 text-gold" />
+                        <span>CallMeBot WhatsApp API Key</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={notificationSettings.callmebot_api_key}
+                        onChange={(e) =>
+                          setNotificationSettings({
+                            ...notificationSettings,
+                            callmebot_api_key: e.target.value.trim(),
+                          })
+                        }
+                        placeholder="Enter API Key from WhatsApp bot"
+                        className="w-full px-3.5 py-2 rounded-lg bg-charcoal border border-charcoal-light text-sm font-mono text-cream focus:outline-none focus:border-gold/50"
                       />
                     </div>
-                    <p className="text-[11px] text-cream-muted/50 mt-1">
-                      Your registered personal WhatsApp recipient (prefilled: 8530085116)
-                    </p>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-cream-muted mb-1.5 flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5 text-gold" />
-                      <span>CallMeBot WhatsApp API Key</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={whatsappSettings.callmebot_api_key}
-                      onChange={(e) =>
-                        setWhatsappSettings({
-                          ...whatsappSettings,
-                          callmebot_api_key: e.target.value.trim(),
-                        })
-                      }
-                      placeholder="Enter API Key from WhatsApp bot (e.g. 123456)"
-                      className="w-full px-3.5 py-2.5 rounded-lg bg-obsidian border border-charcoal-light text-sm font-mono text-cream focus:outline-none focus:border-gold/50"
-                    />
-                    <p className="text-[11px] text-cream-muted/50 mt-1">
-                      Received directly from CallMeBot on WhatsApp after 1-time authorization
-                    </p>
-                  </div>
-                </div>
-
-                {/* 10-Second Activation Guide */}
-                <div className="p-4 rounded-xl bg-obsidian/90 border border-emerald-500/20 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold text-cream uppercase tracking-wider">
-                        1-Time Free Activation (Takes 10 Seconds)
-                      </span>
+                  {/* Active Backup Bot Links */}
+                  <div className="p-3 rounded-lg bg-charcoal/50 border border-charcoal-light text-xs space-y-2">
+                    <span className="text-[11px] font-semibold text-cream-muted/80 block">
+                      If the main CallMeBot is full, message either of the 2 active backup bots:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href="https://wa.me/34644263377?text=I%20allow%20callmebot%20to%20send%20me%20messages"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-600 hover:text-white transition-all"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Backup Bot 1 (+34 644 26 33 77)</span>
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </a>
+                      <a
+                        href="https://wa.me/34623786449?text=I%20allow%20callmebot%20to%20send%20me%20messages"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-600 hover:text-white transition-all"
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>Backup Bot 2 (+34 623 78 64 49)</span>
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </a>
                     </div>
-                    <span className="text-[10px] text-emerald-400/80 font-mono">Official CallMeBot Bot</span>
                   </div>
 
-                  <p className="text-xs text-cream-muted/80 leading-relaxed">
-                    WhatsApp spam policies require a 1-time permission from your phone before automated messages can be delivered to you. Follow these 3 simple steps:
-                  </p>
-
-                  <ol className="text-xs text-cream-muted/80 space-y-2 list-decimal list-inside pl-1">
-                    <li>
-                      Click the green button below to open WhatsApp to <strong>+34 644 10 55 84</strong> from your number (<strong>+91 {whatsappSettings.whatsapp_phone || '8530085116'}</strong>).
-                    </li>
-                    <li>
-                      Send the pre-filled authorization text: <code className="px-2 py-0.5 rounded bg-charcoal text-gold font-mono text-[11px]">I allow callmebot to send me messages</code>
-                    </li>
-                    <li>
-                      The bot will instantly reply with your <strong>API Key</strong>. Copy that key, paste it in the field above, and click <strong>"Save WhatsApp Settings"</strong>!
-                    </li>
-                  </ol>
-
-                  <div className="pt-2 flex flex-wrap items-center gap-3">
-                    <a
-                      href={`https://wa.me/34644105584?text=I%20allow%20callmebot%20to%20send%20me%20messages`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-md hover:scale-[1.02] cursor-pointer"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      <span>1. Open WhatsApp to Get API Key (+34 644 10 55 84)</span>
-                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-                    </a>
-                  </div>
-                </div>
-
-                {/* Actions: Save & Send Live Test Alert */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-charcoal-light">
-                  <div className="flex items-center gap-3">
+                  <div className="flex justify-end">
                     <button
                       type="button"
-                      disabled={isSavingWhatsapp}
-                      onClick={handleSaveWhatsappSettings}
-                      className="px-5 py-2.5 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] disabled:opacity-50 cursor-pointer flex items-center gap-2 shadow-sm"
-                    >
-                      {isSavingWhatsapp ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Saving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Save WhatsApp Settings</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isTestingWhatsapp || !whatsappSettings.callmebot_api_key}
+                      disabled={isTestingWhatsapp || !notificationSettings.callmebot_api_key}
                       onClick={handleTestWhatsappNotification}
-                      className="px-5 py-2.5 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold flex items-center gap-2 disabled:opacity-40 cursor-pointer"
+                      className="px-4 py-2 rounded-lg bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all text-xs font-bold flex items-center gap-2 disabled:opacity-40 cursor-pointer"
                     >
                       {isTestingWhatsapp ? (
                         <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Sending Test Alert...</span>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Testing WhatsApp...</span>
                         </>
                       ) : (
                         <>
-                          <Send className="w-3.5 h-3.5" />
+                          <Send className="w-3 h-3" />
                           <span>Send Test WhatsApp Alert</span>
                         </>
                       )}
                     </button>
                   </div>
-
-                  <span className="text-[11px] text-cream-muted/50 italic">
-                    Recipient: +91 {whatsappSettings.whatsapp_phone || '8530085116'}
-                  </span>
                 </div>
 
-                {/* Test Result Message Box */}
-                {whatsappTestResult && (
-                  <div
-                    className={`p-4 rounded-lg text-xs border ${
-                      whatsappTestResult.type === 'success'
-                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-                        : 'bg-red-950/40 border-red-500/40 text-red-200'
-                    } flex items-start gap-3`}
+                {/* Save All Notification Configurations */}
+                <div className="flex items-center justify-between pt-2 border-t border-charcoal-light">
+                  <span className="text-[11px] text-cream-muted/50 italic">
+                    Alerts sent to: {notificationSettings.admin_email} & +91 {notificationSettings.whatsapp_phone}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={isSavingNotifications}
+                    onClick={handleSaveNotificationSettings}
+                    className="px-6 py-2.5 rounded-lg bg-gold text-obsidian font-bold text-xs hover:bg-gold-dark transition-transform hover:scale-[1.02] disabled:opacity-50 cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(207,181,59,0.25)]"
                   >
-                    {whatsappTestResult.type === 'success' ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    {isSavingNotifications ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving Settings...</span>
+                      </>
                     ) : (
-                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save All Alert Configurations</span>
+                      </>
                     )}
-                    <div className="space-y-1">
-                      <p className="font-bold">
-                        {whatsappTestResult.type === 'success' ? 'Alert Dispatched Successfully!' : 'Delivery Notice:'}
-                      </p>
-                      <p className="leading-relaxed opacity-90">{whatsappTestResult.message}</p>
-                    </div>
-                  </div>
-                )}
+                  </button>
+                </div>
               </div>
 
               {/* Save Settings Action */}
