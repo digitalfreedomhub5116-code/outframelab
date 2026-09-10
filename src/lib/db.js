@@ -157,8 +157,8 @@ export async function getProducts(options = {}) {
             finish: row.finish || mock?.finish || 'Antique Gold Finish',
             keyring: 'Strong and Durable Keyring',
             durability: 'Durable Impact Resistant Structure',
-            discountBadge: mock?.discountBadge || (Number(row.price) === 189 ? '-58%' : '-46%'),
-            discountPercent: mock?.discountPercent || (Number(row.price) === 189 ? 58 : 46),
+            discountBadge: mock?.discountBadge || '-50%',
+            discountPercent: mock?.discountPercent || 50,
           }
         })
         // Update persistent local cache

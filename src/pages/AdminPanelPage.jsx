@@ -84,7 +84,7 @@ function resolveOrderItems(rawOrder, catalogProducts = []) {
         name: 'Outframed Antique Gold Keychain',
         product_name: 'Outframed Antique Gold Keychain',
         quantity: 1,
-        price: rawOrder.total_amount || 249,
+        price: rawOrder.total_amount || 299,
         image: 'https://sooedjbqgrdjtwiobjpr.supabase.co/storage/v1/object/public/product-images/batman-6-cover.jpg',
       },
     ]
@@ -121,7 +121,7 @@ function resolveOrderItems(rawOrder, catalogProducts = []) {
       name: properName,
       product_name: properName,
       quantity: Number(item.quantity) || 1,
-      price: Number(item.price) || matched?.price || 249,
+      price: Number(item.price) || matched?.price || 299,
       image: properImage,
     }
   })
@@ -788,8 +788,8 @@ export default function AdminPanelPage() {
   const [newProduct, setNewProduct] = useState({
     name: '',
     genre: 'MARVEL',
-    price: 249,
-    originalPrice: 459,
+    price: 299,
+    originalPrice: 599,
     description: '',
     image: '',
     gallery: [],
@@ -981,7 +981,7 @@ export default function AdminPanelPage() {
                 pincode: '400001',
               },
               items: resolveOrderItems(o, products),
-              total_amount: o.total_amount || 249,
+              total_amount: o.total_amount || 299,
               payment_method: o.payment_method || 'PREPAID',
               status: st || 'Online Payment',
               awb_code: shipmentObj?.awb_code || o.awb_code || null,
@@ -1198,7 +1198,7 @@ export default function AdminPanelPage() {
               pincode: '400001',
             },
             items: resolveOrderItems(o, products),
-            total_amount: o.total_amount || 249,
+            total_amount: o.total_amount || 299,
             payment_method: o.payment_method || 'PREPAID',
             status: st || 'Online Payment',
             awb_code: shipmentObj?.awb_code || o.awb_code || null,
@@ -1474,8 +1474,8 @@ export default function AdminPanelPage() {
     setNewProduct({
       name: '',
       genre: 'MARVEL',
-      price: 249,
-      originalPrice: 459,
+      price: 299,
+      originalPrice: 599,
       description: '',
       image: '',
       gallery: [],
