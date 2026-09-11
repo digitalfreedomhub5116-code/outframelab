@@ -112,6 +112,7 @@ export default function CartDrawer() {
       return
     }
     try {
+      sessionStorage.removeItem('outframe_buy_now_item')
       sessionStorage.setItem('outframe_checkout_step', '1')
     } catch (e) {}
     closeCart()
@@ -122,6 +123,7 @@ export default function CartDrawer() {
     setCurrentUser(user)
     setIsAuthOpen(false)
     try {
+      sessionStorage.removeItem('outframe_buy_now_item')
       sessionStorage.setItem('outframe_checkout_step', '1')
     } catch (e) {}
     closeCart()

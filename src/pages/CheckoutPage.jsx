@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -18,7 +18,9 @@ import {
   FileText,
   ChevronRight,
   ChevronDown,
-  AlertCircle
+  AlertCircle,
+  Zap,
+  Sparkles
 } from 'lucide-react'
 import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import {
@@ -53,13 +55,55 @@ const loadRazorpayScript = () => {
 
 export default function CheckoutPage() {
   const navigate = useNavigate()
-  const items = useCartStore((s) => s.items)
+  const cartItems = useCartStore((s) => s.items)
   const products = useCartStore((s) => s.products)
   const getTotal = useCartStore((s) => s.getTotal)
   const openCart = useCartStore((s) => s.openCart)
   const closeCart = useCartStore((s) => s.closeCart)
   const updateQuantity = useCartStore((s) => s.updateQuantity)
   const removeItem = useCartStore((s) => s.removeItem)
+
+  // Single-product Buy Now session check
+  const [buyNowItem, setBuyNowItem] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('outframe_buy_now_item')
+      return raw ? JSON.parse(raw) : null
+    } catch (e) {
+      return null
+    }
+  })
+
+  // Active items in checkout: if in Buy Now mode, strictly this single item; otherwise regular cart items
+  const isBuyNowMode = Boolean(buyNowItem)
+  const items = useMemo(() => {
+    return buyNowItem ? [buyNowItem] : cartItems
+  }, [buyNowItem, cartItems])
+
+  // Quantity control helper for both Buy Now and regular cart
+  const handleItemQuantityChange = (itemId, newQty) => {
+    if (isBuyNowMode) {
+      if (newQty <= 0) {
+        try { sessionStorage.removeItem('outframe_buy_now_item') } catch (e) {}
+        setBuyNowItem(null)
+      } else {
+        const updated = { ...buyNowItem, quantity: newQty }
+        setBuyNowItem(updated)
+        try { sessionStorage.setItem('outframe_buy_now_item', JSON.stringify(updated)) } catch (e) {}
+      }
+    } else {
+      updateQuantity(itemId, newQty)
+    }
+  }
+
+  // Remove item helper for both Buy Now and regular cart
+  const handleItemRemove = (itemId) => {
+    if (isBuyNowMode) {
+      try { sessionStorage.removeItem('outframe_buy_now_item') } catch (e) {}
+      setBuyNowItem(null)
+    } else {
+      removeItem(itemId)
+    }
+  }
 
   // Stepper: 1: 'address', 2: 'payment', 3: 'confirm'
   const [currentStep, setCurrentStepState] = useState(() => {
@@ -83,7 +127,9 @@ export default function CheckoutPage() {
   const handleCancelCheckout = () => {
     try {
       sessionStorage.removeItem('outframe_checkout_step')
+      sessionStorage.removeItem('outframe_buy_now_item')
     } catch (e) {}
+    setBuyNowItem(null)
     setCurrentStepState(1)
     closeCart()
     navigate('/')
@@ -93,7 +139,9 @@ export default function CheckoutPage() {
   const handleOpenCartFromCheckout = () => {
     try {
       sessionStorage.removeItem('outframe_checkout_step')
+      sessionStorage.removeItem('outframe_buy_now_item')
     } catch (e) {}
+    setBuyNowItem(null)
     setCurrentStepState(1)
     closeCart()
     navigate('/')
@@ -184,7 +232,12 @@ export default function CheckoutPage() {
   const [orderError, setOrderError] = useState('')
 
   // Financial calculations
-  const subtotal = typeof getTotal === 'function' ? getTotal() : 0
+  const subtotal = useMemo(() => {
+    if (isBuyNowMode && buyNowItem) {
+      return (Number(buyNowItem.price) || 299) * (Number(buyNowItem.quantity) || 1)
+    }
+    return typeof getTotal === 'function' ? getTotal() : 0
+  }, [isBuyNowMode, buyNowItem, getTotal, cartItems])
   const shippingFee = 0 // Free Shipping on all orders
   const convenienceFee = 14 // Small ₹14 convenience fee for order handling on all orders
   const onlineDiscount = paymentMethod === 'PREPAID' ? 30 : 0 // Save ₹30 by paying online
@@ -513,7 +566,13 @@ export default function CheckoutPage() {
               }
 
               const order = await createOrder(paidPayload)
-              useCartStore.getState().clearCart()
+              if (isBuyNowMode) {
+                try { sessionStorage.removeItem('outframe_buy_now_item') } catch (e) {}
+                setBuyNowItem(null)
+              } else {
+                useCartStore.getState().clearCart()
+              }
+              try { sessionStorage.removeItem('outframe_checkout_step') } catch (e) {}
               closeCart()
               navigate(
                 `/order-confirmed?orderId=${order.order_number}&total=${totalAmount}&method=PREPAID&paymentId=${encodeURIComponent(
@@ -556,8 +615,14 @@ export default function CheckoutPage() {
 
       const order = await createOrder(orderPayload)
 
-      // Clear cart locally and from account
-      useCartStore.getState().clearCart()
+      // Clear cart locally and from account (if regular cart checkout)
+      if (isBuyNowMode) {
+        try { sessionStorage.removeItem('outframe_buy_now_item') } catch (e) {}
+        setBuyNowItem(null)
+      } else {
+        useCartStore.getState().clearCart()
+      }
+      try { sessionStorage.removeItem('outframe_checkout_step') } catch (e) {}
       closeCart()
 
       // Redirect to Order Confirmed
@@ -979,6 +1044,11 @@ export default function CheckoutPage() {
                   <span className="text-gold font-normal">
                     ({items.reduce((sum, it) => sum + it.quantity, 0)} {items.length === 1 ? 'item' : 'items'})
                   </span>
+                  {isBuyNowMode && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded bg-gold/15 text-gold text-[9px] font-bold border border-gold/30 shrink-0">
+                      Direct Buy Now
+                    </span>
+                  )}
                   <ChevronDown
                     className={`h-3.5 w-3.5 text-gold transition-transform duration-200 ${
                       showMobileSummary ? 'rotate-180' : ''
@@ -1019,7 +1089,7 @@ export default function CheckoutPage() {
                         <div className="flex items-center gap-1.5 rounded-full border border-charcoal-light bg-obsidian px-2 py-0.5">
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => handleItemQuantityChange(item.id, item.quantity - 1)}
                             className="text-cream-muted hover:text-gold"
                             title="Decrease"
                           >
@@ -1030,7 +1100,7 @@ export default function CheckoutPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => handleItemQuantityChange(item.id, item.quantity + 1)}
                             className="text-cream-muted hover:text-gold"
                             title="Increase"
                           >
@@ -1039,7 +1109,7 @@ export default function CheckoutPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => handleItemRemove(item.id)}
                           className="text-[10px] text-rose-400 hover:text-rose-300 underline"
                         >
                           Remove
@@ -2082,9 +2152,17 @@ export default function CheckoutPage() {
                     Order Summary
                   </h3>
                 </div>
-                <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-bold text-gold border border-gold/20">
-                  {items.reduce((sum, it) => sum + it.quantity, 0)} {items.length === 1 ? 'item' : 'items'}
-                </span>
+                <div className="flex items-center gap-2">
+                  {isBuyNowMode && (
+                    <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold text-gold border border-gold/30 flex items-center gap-1">
+                      <Zap className="h-3 w-3 fill-gold text-gold" />
+                      <span>Direct Buy Now</span>
+                    </span>
+                  )}
+                  <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-xs font-bold text-gold border border-gold/20">
+                    {items.reduce((sum, it) => sum + it.quantity, 0)} {items.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
               </div>
 
               {/* Items List */}
@@ -2111,7 +2189,7 @@ export default function CheckoutPage() {
                         <div className="flex items-center gap-1.5 rounded-full border border-charcoal-light bg-obsidian px-2 py-0.5">
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => handleItemQuantityChange(item.id, item.quantity - 1)}
                             className="text-cream-muted hover:text-gold transition-colors p-0.5"
                             title="Decrease quantity"
                           >
@@ -2122,7 +2200,7 @@ export default function CheckoutPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => handleItemQuantityChange(item.id, item.quantity + 1)}
                             className="text-cream-muted hover:text-gold transition-colors p-0.5"
                             title="Increase quantity"
                           >
@@ -2131,7 +2209,7 @@ export default function CheckoutPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => handleItemRemove(item.id)}
                           className="text-cream-muted/50 hover:text-rose-400 p-1 transition-colors"
                           title="Remove item"
                         >

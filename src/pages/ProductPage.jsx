@@ -13,9 +13,16 @@ import {
   Heart,
   ChevronRight,
   ChevronLeft,
-  ChevronDown
+  ChevronDown,
+  Plus,
+  Minus,
+  Zap,
+  Lock,
+  Flame,
+  Gift,
+  Coins
 } from 'lucide-react'
-import { MOCK_PRODUCTS, useCartStore, GENRES } from '../store/cartStore'
+import { MOCK_PRODUCTS, useCartStore, GENRES, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import { buildProductReviews } from '../data/productsData'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -80,6 +87,7 @@ export default function ProductPage() {
   const isWishlisted = useCartStore((s) => (product ? s.isWishlisted(product.id) : false))
 
   const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [quantity, setQuantity] = useState(1)
   const [activeTab, setActiveTab] = useState('image')
   const [isCopied, setIsCopied] = useState(false)
   const [showAllReviews, setShowAllReviews] = useState(false)
@@ -269,8 +277,31 @@ export default function ProductPage() {
 
   const handleAddToCart = () => {
     if (isOutOfStock) return
-    addItem(product)
+    for (let i = 0; i < quantity; i++) {
+      addItem(product)
+    }
     openCart()
+  }
+
+  const handleBuyNow = () => {
+    if (isOutOfStock) return
+    const cleanImg = resolveProductImage(product, allProducts)
+    const buyNowPayload = {
+      id: product.id,
+      name: product.name,
+      fullName: product.fullName,
+      price: Number(product.price) || 299,
+      originalPrice: Number(product.originalPrice) || 599,
+      quantity: quantity,
+      image: cleanImg,
+      genre: product.genre,
+      isBuyNow: true,
+    }
+    try {
+      sessionStorage.setItem('outframe_buy_now_item', JSON.stringify(buyNowPayload))
+      sessionStorage.setItem('outframe_checkout_step', '1')
+    } catch (e) {}
+    navigate('/checkout')
   }
 
   const scrollToSection = (section) => {
@@ -356,7 +387,15 @@ export default function ProductPage() {
       </div>
 
       {/* Main Product Container */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8">
+        {/* Top Value Announcement Ticker */}
+        <div className="mb-4 sm:mb-6 rounded-2xl bg-gradient-to-r from-gold/15 via-gold/25 to-gold/15 border border-gold/30 px-3.5 sm:px-4 py-2.5 flex items-center justify-center gap-2 text-center text-xs shadow-lg shadow-gold/5">
+          <Sparkles className="h-4 w-4 text-gold flex-shrink-0 animate-pulse" />
+          <span className="text-cream text-[11px] sm:text-xs">
+            <strong className="text-gold font-extrabold uppercase tracking-wider">Collector Drop:</strong> FREE Pan-India Delivery + Extra <strong className="text-emerald-400 font-bold">₹30 OFF</strong> on UPI/Online Payment at Checkout
+          </span>
+        </div>
+
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-xs text-cream-muted/60 mb-6">
           <Link to="/" className="hover:text-gold transition-colors">Home</Link>
@@ -537,12 +576,31 @@ export default function ProductPage() {
           {/* Right: Product Details & Purchase Box */}
           <div className="lg:col-span-5 flex flex-col justify-between">
             <div>
+              {/* Genre & Bestseller Badges */}
+              <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gold/15 border border-gold/30 text-[11px] font-bold text-gold uppercase tracking-wider">
+                  <Flame className="h-3.5 w-3.5 fill-gold text-gold" />
+                  <span>Bestseller #1</span>
+                </span>
+                {genreData && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-charcoal-light/60 border border-charcoal-light text-[11px] font-semibold text-cream-muted uppercase tracking-wider">
+                    {genreData.label}
+                  </span>
+                )}
+                {!isOutOfStock && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-semibold text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span>In Stock · Ships in 24h</span>
+                  </span>
+                )}
+              </div>
+
               {/* Product Full Name Title */}
               <h1 className="font-heading text-2xl sm:text-3xl lg:text-4xl font-extrabold text-cream leading-tight">
                 {product.fullName}
               </h1>
 
-              {/* Ratings and Reviews Bar (Amazon-style) */}
+              {/* Ratings and Reviews Bar */}
               <div
                 onClick={() => scrollToSection('reviews')}
                 className="mt-3 inline-flex items-center gap-2.5 cursor-pointer group/rate"
@@ -565,99 +623,212 @@ export default function ProductPage() {
                   {product.rating || 4.8}
                 </span>
                 <span className="text-xs text-cream-muted/80 underline decoration-gold/40 group-hover/rate:text-gold transition-colors">
-                  {reviews.length || product.reviewCount || 12} verified customer ratings
+                  {reviews.length || product.reviewCount || 12} verified customer reviews
                 </span>
               </div>
 
-              {/* Pricing Section (Side by side with clean -X% text, no green border) */}
-              <div className="mt-6 p-4 rounded-2xl border border-gold/20 bg-charcoal/60 backdrop-blur-sm">
-                <div className="flex items-baseline gap-2.5 sm:gap-3 flex-nowrap">
+              {/* Pricing & Prepaid Discount Card */}
+              <div className="mt-5 p-4 sm:p-5 rounded-2xl border border-gold/25 bg-gradient-to-b from-charcoal/80 to-charcoal/40 backdrop-blur-md shadow-xl">
+                <div className="flex items-baseline gap-2.5 sm:gap-3 flex-wrap">
                   <span className="font-heading text-3xl sm:text-4xl font-extrabold text-gold">
-                    ₹{product.price}
+                    ₹{Number(product.price || 299) * quantity}
                   </span>
                   <span className="text-sm sm:text-base text-cream-muted/50 line-through">
-                    M.R.P.: ₹{product.originalPrice}
+                    M.R.P.: ₹{Number(product.originalPrice || 599) * quantity}
                   </span>
-                  <span className="text-sm sm:text-base font-bold text-emerald-400">
-                    {product.discountBadge || `-${product.discountPercent}%`}
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-xs font-extrabold text-emerald-400">
+                    {product.discountBadge || `-${product.discountPercent || 50}%`}
                   </span>
+                  {quantity > 1 && (
+                    <span className="text-xs text-cream-muted/60 font-medium">
+                      (₹{product.price} each)
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1.5 text-xs text-cream-muted/60">
-                  Inclusive of all taxes. Standard Pan-India Shipping: ₹60.
-                </p>
 
-                {/* Stock status */}
-                {!isOutOfStock ? (
-                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                    <span>In Stock · Dispatched in 24 Hours</span>
+                {/* Instant Prepaid Discount Callout */}
+                <div className="mt-3 flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r from-gold/15 via-gold/10 to-transparent border border-gold/30">
+                  <div className="h-6 w-6 rounded-lg bg-gold/20 flex items-center justify-center shrink-0">
+                    <Zap className="h-3.5 w-3.5 text-gold fill-gold" />
                   </div>
-                ) : (
-                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-rose-400">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" />
-                    <span>Currently Out of Stock · Check back soon</span>
+                  <div className="text-xs text-cream">
+                    <span className="font-bold text-gold">EXTRA ₹30 OFF</span> applied automatically at checkout when paying online (UPI / Cards)!
                   </div>
-                )}
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-charcoal-light/60 flex items-center justify-between text-xs text-cream-muted/70">
+                  <span>Inclusive of all taxes · Free Pan-India Delivery</span>
+                  {!isOutOfStock ? (
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Dispatched in 24h
+                    </span>
+                  ) : (
+                    <span className="text-rose-400 font-semibold">
+                      Out of Stock
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Key Features Bullet List (Requested by user) */}
-              <div className="mt-6 space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-gold">
+              {/* Quantity Selector Stepper */}
+              <div className="mt-4 flex items-center justify-between p-3 rounded-2xl border border-charcoal-light/70 bg-charcoal/40">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-cream-muted">Quantity</span>
+                  <span className="text-[11px] text-cream-muted/60">(Max 10 per order)</span>
+                </div>
+
+                <div className="inline-flex items-center rounded-xl border border-gold/30 bg-obsidian/90 p-1 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1 || isOutOfStock}
+                    aria-label="Decrease quantity"
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-charcoal/60 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                  <span className="w-10 text-center font-heading font-extrabold text-cream text-sm">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                    disabled={quantity >= 10 || isOutOfStock}
+                    aria-label="Increase quantity"
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-charcoal/60 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* "Why You'll Love It" 4-Feature Grid */}
+              <div className="mt-5">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-gold mb-3 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-gold" />
+                  <span>Why You'll Love It</span>
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                  <div className="p-3 rounded-2xl bg-charcoal/50 border border-gold/15 flex flex-col items-center hover:border-gold/35 transition-colors">
+                    <div className="h-10 w-10 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mb-1.5 text-gold">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <span className="font-heading text-xs font-bold text-cream">Antique Gold</span>
+                    <span className="text-[10px] text-cream-muted/70 mt-0.5">Metallic Patina</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-charcoal/50 border border-gold/15 flex flex-col items-center hover:border-gold/35 transition-colors">
+                    <div className="h-10 w-10 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mb-1.5 text-gold">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <span className="font-heading text-xs font-bold text-cream">Eco PLA Composite</span>
+                    <span className="text-[10px] text-cream-muted/70 mt-0.5">Bio-Degradable</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-charcoal/50 border border-gold/15 flex flex-col items-center hover:border-gold/35 transition-colors">
+                    <div className="h-10 w-10 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mb-1.5 text-gold">
+                      <Flame className="h-4 w-4" />
+                    </div>
+                    <span className="font-heading text-xs font-bold text-cream">Laser 3D Relief</span>
+                    <span className="text-[10px] text-cream-muted/70 mt-0.5">Ultra Precise</span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-charcoal/50 border border-gold/15 flex flex-col items-center hover:border-gold/35 transition-colors">
+                    <div className="h-10 w-10 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center mb-1.5 text-gold">
+                      <Gift className="h-4 w-4" />
+                    </div>
+                    <span className="font-heading text-xs font-bold text-cream">Tin Box Gift</span>
+                    <span className="text-[10px] text-cream-muted/70 mt-0.5">Collector Tin</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Key Features Bullet List */}
+              <div className="mt-5 space-y-2 p-4 rounded-2xl bg-charcoal/30 border border-charcoal-light/60">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-gold mb-2">
                   Key Specifications
                 </h4>
-                <ul className="space-y-2 text-sm text-cream-muted">
+                <ul className="space-y-1.5 text-xs sm:text-sm text-cream-muted">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Each keychain is made from bio degradable PLA material.</span>
+                    <span>Made from premium biodegradable PLA material.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Strong and durable keyring</span>
+                    <span>Heavy-duty steel keyring with secure split chain.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Antique gold finish</span>
+                    <span>Antique gold finish with scratch-resistant protective patina.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Durable impact-resistant outframed body</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Dimensions: <strong className="text-cream">64mm * 43mm</strong></span>
+                    <span>Dimensions: <strong className="text-cream font-bold">64mm × 43mm</strong></span>
                   </li>
                 </ul>
               </div>
             </div>
 
-            {/* Desktop Add to Cart Button */}
-            <div className="mt-8 pt-6 border-t border-charcoal-light/80">
+            {/* Desktop Action Buttons (Dual CTA) */}
+            <div className="mt-6 pt-5 border-t border-charcoal-light/80 space-y-3">
+              {/* Primary BUY NOW Button */}
+              <button
+                onClick={handleBuyNow}
+                disabled={isOutOfStock}
+                className={`w-full flex items-center justify-center gap-2.5 rounded-2xl py-4 text-sm font-extrabold uppercase tracking-widest transition-all ${
+                  isOutOfStock
+                    ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-gold via-amber-400 to-gold text-obsidian shadow-xl shadow-gold/30 hover:shadow-gold/50 hover:brightness-105 active:scale-[0.99] cursor-pointer'
+                }`}
+              >
+                <Zap className="h-4 w-4 fill-obsidian text-obsidian" />
+                <span>
+                  {isOutOfStock ? 'Out of Stock' : `BUY IT NOW · ₹${Number(product.price || 299) * quantity}`}
+                </span>
+              </button>
+
+              {/* Secondary ADD TO CART Button */}
               <button
                 onClick={handleAddToCart}
                 disabled={isOutOfStock}
-                className={`w-full flex items-center justify-center gap-3 rounded-2xl py-3.5 sm:py-4 text-sm font-bold uppercase tracking-widest transition-all ${
+                className={`w-full flex items-center justify-center gap-2.5 rounded-2xl py-3.5 text-xs font-bold uppercase tracking-wider transition-all ${
                   isOutOfStock
-                    ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
-                    : 'btn-gold shadow-xl shadow-gold/25 hover:shadow-gold/45 active:scale-98'
+                    ? 'bg-charcoal-light/40 text-cream-muted/40 border border-charcoal-light/60 cursor-not-allowed'
+                    : 'border-2 border-gold/60 text-gold hover:bg-gold/10 hover:border-gold active:scale-[0.99] bg-charcoal/50 cursor-pointer'
                 }`}
               >
-                <ShoppingBag className="h-5 w-5" />
-                <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
+                <ShoppingBag className="h-4 w-4" />
+                <span>Add to Cart</span>
               </button>
 
               {/* Assurance Trust Badges */}
-              <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-                <div className="p-2 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <div className="p-2.5 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
                   <Truck className="h-4 w-4 mx-auto text-gold mb-1" />
-                  <span className="text-[10px] text-cream-muted/70 block">Fast Pan-India Delivery</span>
+                  <span className="text-[10px] text-cream-muted/80 font-medium block">Pan-India Delivery</span>
                 </div>
-                <div className="p-2 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
+                <div className="p-2.5 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
                   <ShieldCheck className="h-4 w-4 mx-auto text-gold mb-1" />
-                  <span className="text-[10px] text-cream-muted/70 block">Solid Quality Guarantee</span>
+                  <span className="text-[10px] text-cream-muted/80 font-medium block">Quality Guarantee</span>
                 </div>
-                <div className="p-2 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
+                <div className="p-2.5 rounded-xl bg-charcoal/40 border border-charcoal-light/50">
                   <RotateCcw className="h-4 w-4 mx-auto text-gold mb-1" />
-                  <span className="text-[10px] text-cream-muted/70 block">Easy Replacement</span>
+                  <span className="text-[10px] text-cream-muted/80 font-medium block">Easy Replacement</span>
+                </div>
+              </div>
+
+              {/* Guaranteed Safe Checkout Logos */}
+              <div className="mt-3 p-3 rounded-2xl border border-charcoal-light/60 bg-charcoal/30 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-cream-muted/80">
+                  <Lock className="h-3.5 w-3.5 text-gold" />
+                  <span>Guaranteed Safe &amp; Secure Checkout</span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-bold text-cream">
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#5f259f]">UPI / QR</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#4285F4]">GPay</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#5f259f]">PhonePe</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#00baf2]">Paytm</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#5a78ff]">VISA</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#eb001b]">Mastercard</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-charcoal-light text-[#097939]">RuPay</span>
+                  <span className="px-2 py-0.5 rounded bg-obsidian/80 border border-gold/30 text-gold">Razorpay</span>
                 </div>
               </div>
             </div>
@@ -861,38 +1032,50 @@ export default function ProductPage() {
         )}
       </div>
 
-      {/* Sticky Bottom "Add to Cart" Bar for Mobile (Inspired by Amazon screenshot) */}
-      <div className="fixed bottom-0 inset-x-0 z-50 sm:hidden border-t border-gold/20 bg-obsidian/95 backdrop-blur-xl px-4 py-3 shadow-2xl">
-        <div className="flex items-center justify-between gap-3">
-          <div>
+      {/* Sticky Bottom Dual Action Bar for Mobile */}
+      <div className="fixed bottom-0 inset-x-0 z-50 sm:hidden border-t border-gold/25 bg-obsidian/95 backdrop-blur-xl px-3.5 py-2.5 shadow-2xl shadow-black">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="shrink-0">
             <div className="flex items-baseline gap-1.5 flex-nowrap">
-              <span className="font-heading text-xl font-extrabold text-gold">
-                ₹{product.price}
+              <span className="font-heading text-lg font-extrabold text-gold">
+                ₹{Number(product.price || 299) * quantity}
               </span>
-              <span className="text-xs text-cream-muted/50 line-through">
-                ₹{product.originalPrice}
-              </span>
-              <span className="text-xs font-bold text-emerald-400">
-                {product.discountBadge}
+              <span className="text-[11px] text-cream-muted/50 line-through">
+                ₹{Number(product.originalPrice || 599) * quantity}
               </span>
             </div>
-            <span className={`text-[10px] font-semibold block ${isOutOfStock ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {isOutOfStock ? 'Currently Out of Stock' : 'In Stock · ₹60 Shipping'}
+            <span className="text-[9px] font-semibold text-emerald-400 block">
+              Free Delivery · ₹30 OFF UPI
             </span>
           </div>
 
-          <button
-            onClick={handleAddToCart}
-            disabled={isOutOfStock}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-bold uppercase tracking-wider ${
-              isOutOfStock
-                ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
-                : 'btn-gold shadow-lg shadow-gold/20'
-            }`}
-          >
-            <ShoppingBag className="h-4 w-4" />
-            <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
-          </button>
+          <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+            {/* Add to Cart button (compact) */}
+            <button
+              onClick={handleAddToCart}
+              disabled={isOutOfStock}
+              aria-label="Add to Cart"
+              className={`p-2.5 rounded-xl border border-gold/40 text-gold bg-charcoal/70 active:scale-95 transition-all shrink-0 ${
+                isOutOfStock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gold/10'
+              }`}
+            >
+              <ShoppingBag className="h-4 w-4" />
+            </button>
+
+            {/* BUY NOW Button (Primary) */}
+            <button
+              onClick={handleBuyNow}
+              disabled={isOutOfStock}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-extrabold uppercase tracking-wider transition-all truncate ${
+                isOutOfStock
+                  ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-gold via-amber-400 to-gold text-obsidian shadow-lg shadow-gold/30 active:scale-95'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5 fill-obsidian text-obsidian shrink-0" />
+              <span className="truncate">{isOutOfStock ? 'Sold Out' : 'BUY NOW'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
