@@ -23,6 +23,7 @@ import {
   Sparkles
 } from 'lucide-react'
 import { useCartStore, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
+import OptimizedImage from '../components/OptimizedImage'
 import {
   getCurrentCustomer,
   getUserAddresses,
@@ -1071,13 +1072,13 @@ export default function CheckoutPage() {
               <div className="divide-y divide-charcoal-light/50 max-h-64 overflow-y-auto pr-1">
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-center gap-3">
-                    <img
+                    <OptimizedImage
                       src={resolveProductImage(item, products)}
                       alt={item.name}
-                      onError={(e) => {
-                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
-                      }}
-                      className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
+                      width={160}
+                      quality={75}
+                      className="h-full w-full object-cover"
+                      containerClassName="h-14 w-14 rounded-xl border border-gold/15 bg-obsidian shrink-0 overflow-hidden"
                     />
                     <div className="flex-1 min-w-0">
                       <h4 className="font-heading text-xs font-bold text-cream truncate">
@@ -2045,13 +2046,13 @@ export default function CheckoutPage() {
               <div className="divide-y divide-charcoal-light/60 mt-3">
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-center gap-3">
-                    <img
+                    <OptimizedImage
                       src={resolveProductImage(item, products)}
                       alt={item.name}
-                      onError={(e) => {
-                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
-                      }}
-                      className="h-14 w-14 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
+                      width={160}
+                      quality={75}
+                      className="h-full w-full object-cover"
+                      containerClassName="h-14 w-14 rounded-xl border border-gold/15 bg-obsidian shrink-0 overflow-hidden"
                     />
                     <div className="flex-1 min-w-0 text-left">
                       <p className="font-heading text-xs sm:text-sm font-bold text-cream truncate">
@@ -2169,13 +2170,13 @@ export default function CheckoutPage() {
               <div className="divide-y divide-charcoal-light/60 my-4 max-h-80 overflow-y-auto pr-1">
                 {items.map((item) => (
                   <div key={item.id} className="py-3 flex items-start gap-3">
-                    <img
+                    <OptimizedImage
                       src={resolveProductImage(item, products)}
                       alt={item.name}
-                      onError={(e) => {
-                        e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
-                      }}
-                      className="h-16 w-16 object-cover rounded-xl border border-gold/15 bg-obsidian shrink-0"
+                      width={160}
+                      quality={75}
+                      className="h-full w-full object-cover"
+                      containerClassName="h-16 w-16 rounded-xl border border-gold/15 bg-obsidian shrink-0 overflow-hidden"
                     />
                     <div className="flex-1 min-w-0">
                       <h4 className="font-heading text-xs font-bold text-cream leading-snug truncate">

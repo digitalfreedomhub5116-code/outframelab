@@ -7,9 +7,9 @@ import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
 import ReviewsModal from '../components/ReviewsModal'
 import WishlistDrawer from '../components/WishlistDrawer'
+import OptimizedImage from '../components/OptimizedImage'
 
-
-function ProductCard({ product }) {
+function ProductCard({ product, priority = false }) {
   const navigate = useNavigate()
   const addItem = useCartStore((s) => s.addItem)
   const openCart = useCartStore((s) => s.openCart)
@@ -42,13 +42,16 @@ function ProductCard({ product }) {
     >
       {/* Product Background Image & Wishlist Button */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-obsidian">
-        <img
+        <OptimizedImage
           src={(Array.isArray(product.gallery) && product.gallery[0]) || product.image}
           alt={product.name}
+          width={450}
+          quality={80}
+          priority={priority}
           className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
             isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''
           }`}
-          loading="lazy"
+          containerClassName="h-full w-full"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal/80 via-transparent to-transparent opacity-60" />
 
@@ -252,8 +255,8 @@ export default function CategoryPage() {
           {products.length > 0 ? (
             /* Products Grid */
             <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
+              {products.map((product, index) => (
+                <ProductCard key={product.id} product={product} priority={index < 4} />
               ))}
             </div>
           ) : (

@@ -21,6 +21,8 @@ import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
 import WishlistDrawer from '../components/WishlistDrawer'
+import OptimizedImage from '../components/OptimizedImage'
+import { getOptimizedImageUrl } from '../lib/imageOptimizer'
 
 export default function ProductPage() {
   const { productIdOrSlug } = useParams()
@@ -241,6 +243,16 @@ export default function ProductPage() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  // Background preloading of subsequent gallery slides for instantaneous swiping
+  useEffect(() => {
+    if (!Array.isArray(gallery) || gallery.length <= 1) return
+    gallery.slice(1).forEach((imgUrl) => {
+      const optimized = getOptimizedImageUrl(imgUrl, { width: 800, quality: 85 })
+      const img = new Image()
+      img.src = optimized
+    })
+  }, [gallery])
+
   if (!product || product.isHidden) {
     return (
       <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
@@ -427,10 +439,14 @@ export default function ProductPage() {
                         : 'border-charcoal-light/70 hover:border-gold/50 opacity-70 hover:opacity-100'
                     }`}
                   >
-                    <img
+                    <OptimizedImage
                       src={imgUrl}
                       alt={`${product.name} view ${index + 1}`}
+                      width={160}
+                      quality={75}
+                      priority={true}
                       className="h-full w-full object-cover"
+                      containerClassName="h-full w-full"
                     />
                   </button>
                 )
@@ -460,10 +476,14 @@ export default function ProductPage() {
                     key={index}
                     className="w-full min-w-full h-full flex-shrink-0 snap-start snap-always relative"
                   >
-                    <img
+                    <OptimizedImage
                       src={imgUrl}
                       alt={`${product.fullName} view ${index + 1}`}
+                      width={800}
+                      quality={85}
+                      priority={index === 0}
                       className="h-full w-full object-cover select-none pointer-events-none"
+                      containerClassName="h-full w-full"
                       draggable={false}
                     />
                   </div>
@@ -884,10 +904,13 @@ export default function ProductPage() {
                   className="product-card group relative cursor-pointer overflow-hidden rounded-2xl border border-charcoal-light/70 bg-charcoal p-3 transition-all hover:border-gold/50"
                 >
                   <div className="aspect-[4/5] rounded-xl overflow-hidden bg-obsidian mb-3">
-                    <img
+                    <OptimizedImage
                       src={rel.image}
                       alt={rel.name}
+                      width={400}
+                      quality={80}
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-108"
+                      containerClassName="h-full w-full"
                     />
                   </div>
                   <h4 className="font-heading text-sm font-bold text-cream group-hover:text-gold transition-colors line-clamp-1">

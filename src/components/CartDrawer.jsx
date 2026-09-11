@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentCustomer, initAuthListener } from '../lib/db'
 import AuthModal from './AuthModal'
+import OptimizedImage from './OptimizedImage'
 
 function CartItem({ item }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity)
@@ -16,13 +17,13 @@ function CartItem({ item }) {
     <div className="flex gap-3.5 rounded-xl border border-charcoal-light/60 bg-charcoal/80 p-3">
       {/* Thumbnail */}
       <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gold/15 bg-obsidian">
-        <img
+        <OptimizedImage
           src={itemImage}
           alt={item.name}
-          onError={(e) => {
-            e.currentTarget.src = DEFAULT_FALLBACK_IMAGE
-          }}
+          width={160}
+          quality={75}
           className="h-full w-full object-cover"
+          containerClassName="h-full w-full"
         />
       </div>
 

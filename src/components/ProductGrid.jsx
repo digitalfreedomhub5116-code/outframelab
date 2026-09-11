@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useCartStore, MOCK_PRODUCTS } from '../store/cartStore'
 import { useScrollReveal } from '../hooks/useScrollReveal'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import OptimizedImage from './OptimizedImage'
 
 const PRODUCTS_PER_BATCH = 8
 
-function ProductCard({ product }) {
+function ProductCard({ product, priority = false }) {
   const navigate = useNavigate()
   const addItem = useCartStore((s) => s.addItem)
   const openCart = useCartStore((s) => s.openCart)
@@ -43,13 +44,16 @@ function ProductCard({ product }) {
     >
       {/* Product Background Image & Wishlist Button */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-obsidian">
-        <img
+        <OptimizedImage
           src={(Array.isArray(product.gallery) && product.gallery[0]) || product.image}
           alt={product.name}
+          width={450}
+          quality={80}
+          priority={priority}
           className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
             isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''
           }`}
-          loading="lazy"
+          containerClassName="h-full w-full"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal/80 via-transparent to-transparent opacity-60" />
 
@@ -192,8 +196,8 @@ export default function ProductGrid() {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Product Grid */}
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 lg:gap-5 xl:grid-cols-4">
-          {visibleProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {visibleProducts.map((product, index) => (
+            <ProductCard key={product.id} product={product} priority={index < 4} />
           ))}
         </div>
 
