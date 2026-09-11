@@ -5,10 +5,6 @@ import {
   ShoppingBag,
   ArrowLeft,
   CheckCircle2,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
-  Sparkles,
   Share2,
   Heart,
   ChevronRight,
@@ -17,10 +13,7 @@ import {
   Plus,
   Minus,
   Zap,
-  Lock,
   Flame,
-  Gift,
-  Coins
 } from 'lucide-react'
 import { MOCK_PRODUCTS, useCartStore, GENRES, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import { buildProductReviews } from '../data/productsData'
@@ -717,48 +710,12 @@ export default function ProductPage() {
                   </span>
                 </button>
               </div>
-
-              {/* Key Product Highlights (Uncrowded, sleek) */}
-              <div className="mt-4 pt-3 border-t border-charcoal-light/40">
-                <div className="grid grid-cols-2 gap-2 text-xs text-cream-muted/90">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-3.5 w-3.5 text-gold shrink-0" />
-                    <span>Antique Gold Metallic Patina</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-3.5 w-3.5 text-gold shrink-0" />
-                    <span>Biodegradable PLA Composite</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Flame className="h-3.5 w-3.5 text-gold shrink-0" />
-                    <span>3D Laser Relief (64 × 43mm)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Gift className="h-3.5 w-3.5 text-gold shrink-0" />
-                    <span>Free Collector Tin Box</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Assurance & Security Strip */}
-              <div className="mt-4 pt-3 border-t border-charcoal-light/40 text-center space-y-1.5">
-                <div className="flex items-center justify-center gap-3 text-[11px] text-cream-muted/70">
-                  <span className="flex items-center gap-1"><Truck className="h-3 w-3 text-gold/80" /> Free Pan-India Delivery</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1"><RotateCcw className="h-3 w-3 text-gold/80" /> 7-Day Replacement</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1"><Lock className="h-3 w-3 text-gold/80" /> Secure Checkout</span>
-                </div>
-                <p className="text-[10px] text-cream-muted/50 tracking-wide">
-                  UPI · Google Pay · PhonePe · Paytm · Cards · Netbanking
-                </p>
-              </div>
             </div>
           </div>
         </div>
 
         {/* Section 2: Dedicated Description Tab / Content */}
-        <div ref={descSectionRef} className="mt-20 pt-10 border-t border-gold/15 scroll-mt-14 sm:scroll-mt-16">
+        <div ref={descSectionRef} className="mt-12 sm:mt-16 pt-8 sm:pt-10 border-t border-gold/15 scroll-mt-14 sm:scroll-mt-16">
           <div className="max-w-4xl">
             <h2 className="font-heading text-2xl sm:text-3xl font-bold text-cream">
               Product Description
