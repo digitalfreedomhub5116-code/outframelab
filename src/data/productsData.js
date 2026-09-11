@@ -476,6 +476,7 @@ export const MOCK_PRODUCTS = RAW_PRODUCTS.map((p) => {
   const originalPrice = p.originalPrice || 599
   const discountPercent = Math.round(((originalPrice - p.price) / originalPrice) * 100)
   const discountBadge = `-${discountPercent}%`
+  const isBestseller = p.name === 'Iron Man' || p.name === 'Hulk' || p.id === 1 || p.id === 4
 
   return {
     ...p,
@@ -483,6 +484,7 @@ export const MOCK_PRODUCTS = RAW_PRODUCTS.map((p) => {
     fullName,
     originalPrice,
     discountPercent,
+    isBestseller,
     image: p.image || DUMMY_GALLERY[0],
     gallery: Array.isArray(p.gallery) && p.gallery.length > 0 ? p.gallery : (p.image ? [p.image] : DUMMY_GALLERY),
     description,
