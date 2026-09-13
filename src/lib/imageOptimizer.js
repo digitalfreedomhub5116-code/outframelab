@@ -11,25 +11,28 @@
  */
 
 export const IMAGE_SIZES = {
-  THUMBNAIL: { width: 160, quality: 75 },
-  CARD: { width: 450, quality: 80 },
-  HERO: { width: 800, quality: 85 },
-  FULL: { width: 1200, quality: 85 },
+  THUMBNAIL: { width: 160, quality: 75, resize: 'contain' },
+  CARD: { width: 450, quality: 80, resize: 'contain' },
+  HERO: { width: 800, quality: 85, resize: 'contain' },
+  FULL: { width: 1200, quality: 85, resize: 'contain' },
 }
 
 /**
  * Returns an optimized CDN URL with specified width and compression quality.
+ * Guarantees aspect ratio preservation by using resize=contain on Supabase transformations.
  * 
  * @param {string} url - Original image URL
  * @param {Object} [options] - Options object
  * @param {number} [options.width] - Desired width in pixels
+ * @param {number} [options.height] - Desired height in pixels
  * @param {number} [options.quality=80] - Image quality (1-100)
+ * @param {string} [options.resize='contain'] - Supabase resize mode ('contain', 'cover', 'fill')
  * @returns {string} Optimized URL or original if transformation is not applicable
  */
 export function getOptimizedImageUrl(url, options = {}) {
   if (!url || typeof url !== 'string') return url
 
-  const { width, quality = 80 } = options
+  const { width, height, quality = 80, resize = 'contain' } = options
 
   // Handle Supabase Storage Public URLs
   if (url.includes('/storage/v1/object/public/')) {
@@ -39,7 +42,9 @@ export function getOptimizedImageUrl(url, options = {}) {
     )
     const params = new URLSearchParams()
     if (width) params.set('width', String(Math.round(width)))
+    if (height) params.set('height', String(Math.round(height)))
     if (quality) params.set('quality', String(quality))
+    if (resize) params.set('resize', resize)
     const qs = params.toString()
     return qs ? `${baseUrl}?${qs}` : baseUrl
   }
@@ -49,7 +54,9 @@ export function getOptimizedImageUrl(url, options = {}) {
     try {
       const u = new URL(url)
       if (width) u.searchParams.set('width', String(Math.round(width)))
+      if (height) u.searchParams.set('height', String(Math.round(height)))
       if (quality) u.searchParams.set('quality', String(quality))
+      if (resize) u.searchParams.set('resize', resize)
       return u.toString()
     } catch {
       return url
@@ -61,6 +68,7 @@ export function getOptimizedImageUrl(url, options = {}) {
     try {
       const u = new URL(url)
       if (width) u.searchParams.set('w', String(Math.round(width)))
+      if (height) u.searchParams.set('h', String(Math.round(height)))
       u.searchParams.set('q', String(quality))
       u.searchParams.set('auto', 'format')
       return u.toString()

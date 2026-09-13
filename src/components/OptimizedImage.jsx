@@ -16,7 +16,9 @@ export default function OptimizedImage({
   className = '',
   containerClassName = '',
   width,
+  height,
   quality = 80,
+  resize = 'contain',
   priority = false,
   fallback = DEFAULT_FALLBACK_IMAGE,
   draggable = false,
@@ -25,15 +27,15 @@ export default function OptimizedImage({
   style = {},
   ...props
 }) {
-  const targetSrc = getOptimizedImageUrl(src, { width, quality })
+  const targetSrc = getOptimizedImageUrl(src, { width, height, quality, resize })
   const [currentSrc, setCurrentSrc] = useState(targetSrc)
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
   const imgRef = useRef(null)
 
-  // Reset when source URL or target width changes
+  // Reset when source URL, dimensions, or quality change
   useEffect(() => {
-    const nextSrc = getOptimizedImageUrl(src, { width, quality })
+    const nextSrc = getOptimizedImageUrl(src, { width, height, quality, resize })
     setCurrentSrc(nextSrc)
     setHasError(false)
 
@@ -43,7 +45,7 @@ export default function OptimizedImage({
     } else {
       setIsLoaded(false)
     }
-  }, [src, width, quality])
+  }, [src, width, height, quality, resize])
 
   const handleImageLoad = (e) => {
     setIsLoaded(true)

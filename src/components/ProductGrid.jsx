@@ -43,14 +43,14 @@ function ProductCard({ product, priority = false }) {
       }`}
     >
       {/* Product Background Image & Wishlist Button */}
-      <div className="relative aspect-[4/5] w-full overflow-hidden bg-obsidian">
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-obsidian">
         <OptimizedImage
           src={(Array.isArray(product.gallery) && product.gallery[0]) || product.image}
           alt={product.name}
           width={450}
           quality={80}
           priority={priority}
-          className={`h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
+          className={`h-full w-full object-cover object-center transition-transform duration-500 ease-out sm:group-hover:scale-105 ${
             isOutOfStock ? 'opacity-70 grayscale-[25%]' : ''
           }`}
           containerClassName="h-full w-full"

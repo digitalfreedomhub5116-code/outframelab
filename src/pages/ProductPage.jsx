@@ -455,7 +455,7 @@ export default function ProductPage() {
 
             {/* Main Image Display Carousel */}
             <div
-              className="relative flex-1 aspect-[4/5] sm:aspect-square rounded-2xl overflow-hidden border border-charcoal-light/80 bg-charcoal shadow-2xl shadow-black/80 group select-none"
+              className="relative flex-1 aspect-[3/4] sm:aspect-[4/5] lg:aspect-[3/4] rounded-2xl overflow-hidden border border-charcoal-light/80 bg-charcoal shadow-2xl shadow-black/80 group select-none"
             >
               {/* Native Snap Scrollable Track (Fluid swipe, 100% immune to getting stuck in between) */}
               <div
@@ -482,7 +482,7 @@ export default function ProductPage() {
                       width={800}
                       quality={85}
                       priority={index === 0}
-                      className="h-full w-full object-cover select-none pointer-events-none"
+                      className="h-full w-full object-cover object-center select-none pointer-events-none"
                       containerClassName="h-full w-full"
                       draggable={false}
                     />
@@ -903,13 +903,13 @@ export default function ProductPage() {
                   onClick={() => navigate(`/product/${rel.slug}`)}
                   className="product-card group relative cursor-pointer overflow-hidden rounded-2xl border border-charcoal-light/70 bg-charcoal p-3 transition-all hover:border-gold/50"
                 >
-                  <div className="aspect-[4/5] rounded-xl overflow-hidden bg-obsidian mb-3">
+                  <div className="aspect-[3/4] rounded-xl overflow-hidden bg-obsidian mb-3">
                     <OptimizedImage
                       src={rel.image}
                       alt={rel.name}
                       width={400}
                       quality={80}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-108"
+                      className="h-full w-full object-cover object-center transition-transform duration-500 sm:group-hover:scale-105"
                       containerClassName="h-full w-full"
                     />
                   </div>
