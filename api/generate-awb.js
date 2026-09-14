@@ -454,10 +454,10 @@ export default async function handler(req, res) {
       order_items: formattedItems,
       payment_method: paymentMethod,
       sub_total: totalAmount,
-      length: 10,
-      breadth: 10,
+      length: 13,
+      breadth: 13,
       height: 5,
-      weight: 0.1,
+      weight: 0.15,
     }
 
     // ── Require valid Shiprocket credentials ──
@@ -521,7 +521,7 @@ export default async function handler(req, res) {
         try {
           const isCod = paymentMethod === 'COD' ? 1 : 0
           const serviceRes = await fetch(
-            `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=415106&delivery_postcode=${rawPincode}&weight=0.1&cod=${isCod}`,
+            `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=415106&delivery_postcode=${rawPincode}&weight=0.15&cod=${isCod}`,
             {
               headers: {
                 'Content-Type': 'application/json',
@@ -1162,7 +1162,7 @@ async function handleGetCourierRates({
   }
 
   const pickupPostcode = process.env.PICKUP_POSTCODE || '415106'
-  const weight = query.weight || body.weight || 0.1
+  const weight = query.weight || body.weight || 0.15
 
   const serviceUrl = `https://apiv2.shiprocket.in/v1/external/courier/serviceability/?pickup_postcode=${pickupPostcode}&delivery_postcode=${rawPincode}&weight=${weight}&cod=${isCod}`
 

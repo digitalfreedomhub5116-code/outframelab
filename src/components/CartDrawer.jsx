@@ -3,6 +3,7 @@ import { useCartStore, GENRES, resolveProductImage, DEFAULT_FALLBACK_IMAGE } fro
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentCustomer, initAuthListener } from '../lib/db'
+import { clarityEvent } from '../lib/analytics'
 import AuthModal from './AuthModal'
 import OptimizedImage from './OptimizedImage'
 
@@ -108,6 +109,7 @@ export default function CartDrawer() {
   }, [])
 
   const handleProceedToCheckout = () => {
+    clarityEvent('proceed_to_checkout_from_cart')
     if (!currentUser) {
       setIsAuthOpen(true)
       return

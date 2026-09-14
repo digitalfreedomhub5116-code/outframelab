@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Check, Package, ArrowRight, ShoppingBag, Truck, CreditCard, ShieldCheck } from 'lucide-react'
+import { clarityEvent, clarityTag } from '../lib/analytics'
 
 export default function OrderConfirmedPage() {
   const navigate = useNavigate()
@@ -15,8 +16,12 @@ export default function OrderConfirmedPage() {
   // Trigger the checkmark animation after a slight delay on mount
   useEffect(() => {
     const timer = setTimeout(() => setShowCheck(true), 300)
+    clarityTag('order_confirmed_id', orderId)
+    clarityTag('order_confirmed_total', total)
+    clarityTag('order_confirmed_method', method)
+    clarityEvent('view_order_confirmed_page')
     return () => clearTimeout(timer)
-  }, [])
+  }, [orderId, total, method])
 
   return (
     <>

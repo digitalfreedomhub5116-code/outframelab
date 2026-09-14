@@ -37,6 +37,7 @@ import {
   signUpWithEmail,
   logoutCustomer
 } from '../lib/db'
+import { trackCheckoutStep, trackOrderCompleted } from '../lib/analytics'
 
 // Helper to load Razorpay checkout script on demand
 const loadRazorpayScript = () => {
@@ -249,6 +250,16 @@ export default function CheckoutPage() {
   )
   const totalSavings = Math.max(0, originalTotal - subtotal + onlineDiscount)
   const [showMobileSummary, setShowMobileSummary] = useState(false)
+
+  // Track Checkout Funnel Step in Analytics & Clarity
+  useEffect(() => {
+    const stepNames = { 1: 'address', 2: 'payment', 3: 'review' }
+    trackCheckoutStep(currentStep, stepNames[currentStep] || 'unknown', {
+      itemCount: items.length,
+      totalAmount,
+      paymentMethod,
+    })
+  }, [currentStep, items.length, totalAmount, paymentMethod])
 
   // Auth listener
   useEffect(() => {
@@ -567,6 +578,7 @@ export default function CheckoutPage() {
               }
 
               const order = await createOrder(paidPayload)
+              trackOrderCompleted(order)
               if (isBuyNowMode) {
                 try { sessionStorage.removeItem('outframe_buy_now_item') } catch (e) {}
                 setBuyNowItem(null)
@@ -615,6 +627,7 @@ export default function CheckoutPage() {
       }
 
       const order = await createOrder(orderPayload)
+      trackOrderCompleted(order)
 
       // Clear cart locally and from account (if regular cart checkout)
       if (isBuyNowMode) {

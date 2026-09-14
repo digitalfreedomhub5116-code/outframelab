@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { MOCK_PRODUCTS, useCartStore, GENRES, resolveProductImage, DEFAULT_FALLBACK_IMAGE } from '../store/cartStore'
 import { buildProductReviews } from '../data/productsData'
+import { trackProductView, trackAddToCart, trackBuyNow } from '../lib/analytics'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
 import CartDrawer from '../components/CartDrawer'
@@ -253,6 +254,13 @@ export default function ProductPage() {
     })
   }, [gallery])
 
+  // Track Product View in Analytics & Clarity
+  useEffect(() => {
+    if (product && !product.isHidden) {
+      trackProductView(product)
+    }
+  }, [product?.id])
+
   if (!product || product.isHidden) {
     return (
       <div className="min-h-screen bg-obsidian text-cream flex flex-col justify-between">
@@ -298,11 +306,13 @@ export default function ProductPage() {
     for (let i = 0; i < quantity; i++) {
       addItem(product)
     }
+    trackAddToCart(product, quantity)
     openCart()
   }
 
   const handleBuyNow = () => {
     if (isOutOfStock) return
+    trackBuyNow(product, quantity)
     const cleanImg = resolveProductImage(product, allProducts)
     const buyNowPayload = {
       id: product.id,

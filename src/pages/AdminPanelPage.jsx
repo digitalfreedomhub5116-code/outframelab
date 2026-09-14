@@ -2868,8 +2868,8 @@ export default function AdminPanelPage() {
                           </div>
                           <div>
                             <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Package</span>
-                            <span className="text-cream font-medium block mt-0.5">0.10 kg (100g)</span>
-                            <span className="text-cream-muted/60 text-[10px]">10×10×5 cm</span>
+                            <span className="text-cream font-medium block mt-0.5">0.15 kg (150g)</span>
+                            <span className="text-cream-muted/60 text-[10px]">13×13×5 cm (5×5×2")</span>
                           </div>
                           <div>
                             <span className="text-cream-muted/50 block text-[10px] uppercase font-bold tracking-wider">Pickup Hub</span>
