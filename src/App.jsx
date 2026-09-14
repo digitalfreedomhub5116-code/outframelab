@@ -1,6 +1,7 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useCartStore } from './store/cartStore'
+import { trackPageView } from './lib/analytics'
 import HomePage from './pages/HomePage'
 import CategoryPage from './pages/CategoryPage'
 import ProductPage from './pages/ProductPage'
@@ -14,6 +15,16 @@ import TermsPage from './pages/TermsPage'
 import ShippingPolicyPage from './pages/ShippingPolicyPage'
 
 import { initAuthListener, loadAccountCart, initProductSync } from './lib/db'
+
+function AnalyticsRouteTracker() {
+  const location = useLocation()
+  useEffect(() => {
+    if (!location.pathname.startsWith('/admin') && !location.pathname.startsWith('/auth')) {
+      trackPageView(location.pathname)
+    }
+  }, [location.pathname])
+  return null
+}
 
 function CartRouteHandler() {
   const openCart = useCartStore((s) => s.openCart)
@@ -55,6 +66,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <AnalyticsRouteTracker />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/checkout" element={<CheckoutPage />} />

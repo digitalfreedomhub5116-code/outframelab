@@ -50,7 +50,10 @@ import {
   Key,
   Mail,
   CreditCard,
-  Send
+  Send,
+  Users,
+  MousePointerClick,
+  Zap
 } from 'lucide-react'
 import { GENRES, MOCK_PRODUCTS } from '../data/productsData'
 import { useCartStore } from '../store/cartStore'
@@ -68,6 +71,7 @@ import {
   DEFAULT_ADMIN_WHATSAPP,
   DEFAULT_ADMIN_EMAIL
 } from '../lib/db'
+import { fetchAnalyticsSummary } from '../lib/analytics'
 
 // Helper to resolve clean, authentic product name, high-res image, and quantity for order items
 function resolveOrderItems(rawOrder, catalogProducts = []) {
@@ -721,7 +725,7 @@ export default function AdminPanelPage() {
     try {
       const params = new URLSearchParams(window.location.search)
       const tabParam = params.get('tab')
-      if (['overview', 'orders', 'products', 'settings'].includes(tabParam)) {
+      if (['overview', 'analytics', 'orders', 'products', 'settings'].includes(tabParam)) {
         return tabParam
       }
     } catch (e) {}
@@ -761,6 +765,35 @@ export default function AdminPanelPage() {
   const [courierError, setCourierError] = useState(null)
   const [selectedCourierId, setSelectedCourierId] = useState(null)
   const [isAssigningCourier, setIsAssigningCourier] = useState(false)
+
+  // Real-time Traffic & Checkout Funnel Analytics State
+  const [analyticsTimeRange, setAnalyticsTimeRange] = useState('today')
+  const [analyticsData, setAnalyticsData] = useState(null)
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+  const [analyticsError, setAnalyticsError] = useState(null)
+
+  const loadAnalytics = async (timeRange = analyticsTimeRange) => {
+    setLoadingAnalytics(true)
+    setAnalyticsError(null)
+    try {
+      const res = await fetchAnalyticsSummary(timeRange)
+      if (res.success) {
+        setAnalyticsData(res.data)
+      } else {
+        setAnalyticsError(res.error || 'Failed to retrieve visitor traffic analytics')
+      }
+    } catch (err) {
+      setAnalyticsError(err.message || 'Error querying analytics events')
+    } finally {
+      setLoadingAnalytics(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      loadAnalytics(analyticsTimeRange)
+    }
+  }, [activeTab, analyticsTimeRange])
 
   // Automated Order Notification Settings State (Gmail + WhatsApp)
   const [notificationSettings, setNotificationSettings] = useState({
@@ -1916,6 +1949,7 @@ export default function AdminPanelPage() {
           <nav className="p-4 space-y-1.5">
             {[
               { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+              { id: 'analytics', label: 'Traffic & Funnel', icon: BarChart3 },
               { id: 'orders', label: 'Orders', icon: ShoppingBag, count: orders.length },
               { id: 'products', label: 'Products', icon: Package, count: products.length },
               { id: 'settings', label: 'Settings', icon: SettingsIcon },
@@ -2362,6 +2396,394 @@ export default function AdminPanelPage() {
                       <span className="text-gold font-medium">
                         {dispatchedOrdersCount} Manifested Shipments (Shiprocket Live)
                       </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════
+              TRAFFIC & CHECKOUT FUNNEL ANALYTICS TAB
+          ════════════════════════════════════════════════════════ */}
+          {activeTab === 'analytics' && (
+            <div className="space-y-8">
+              {/* Top Header & Range Filters */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-charcoal/80 border border-charcoal-light/80 backdrop-blur-sm">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="font-heading text-xl font-bold text-cream">
+                      Traffic & Checkout Funnel Analytics
+                    </h2>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Live Tracking Active
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-cream-muted/70">
+                    Real-time visitor counts, keychain engagement, and checkout drop-off rates from live customers.
+                  </p>
+                </div>
+
+                {/* Range Selector & Refresh */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="inline-flex rounded-xl bg-obsidian p-1 border border-charcoal-light">
+                    {[
+                      { id: 'today', label: 'Today' },
+                      { id: '7d', label: '7 Days' },
+                      { id: '30d', label: '30 Days' },
+                      { id: 'all', label: 'All Time' },
+                    ].map((range) => (
+                      <button
+                        key={range.id}
+                        type="button"
+                        onClick={() => {
+                          setAnalyticsTimeRange(range.id)
+                          loadAnalytics(range.id)
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          analyticsTimeRange === range.id
+                            ? 'bg-gold text-obsidian shadow-sm shadow-gold/20'
+                            : 'text-cream-muted hover:text-cream'
+                        }`}
+                      >
+                        {range.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => loadAnalytics(analyticsTimeRange)}
+                    disabled={loadingAnalytics}
+                    className="p-2.5 rounded-xl bg-charcoal-light/40 border border-charcoal-light hover:border-gold/40 text-cream-muted hover:text-gold transition-all cursor-pointer disabled:opacity-50"
+                    title="Refresh analytics data"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingAnalytics ? 'animate-spin text-gold' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Callout if any */}
+              {analyticsError && (
+                <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs flex items-center gap-3">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{analyticsError}</span>
+                </div>
+              )}
+
+              {/* 5 KPI Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* 1. Total Unique Visitors */}
+                <div className="p-5 rounded-xl bg-charcoal border border-charcoal-light relative overflow-hidden group hover:border-gold/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-cream-muted/70 font-semibold">
+                      Unique Visitors
+                    </span>
+                    <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                      <Users className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-heading font-black text-cream">
+                      {loadingAnalytics ? '...' : (analyticsData?.totalVisitors || 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs font-semibold text-emerald-400">
+                      {analyticsData?.pageViewsCount || 0} views
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-cream-muted/50">
+                    {analyticsData?.mobilePct || 0}% Mobile · {analyticsData?.desktopPct || 0}% Desktop
+                  </p>
+                </div>
+
+                {/* 2. Product Views */}
+                <div className="p-5 rounded-xl bg-charcoal border border-charcoal-light relative overflow-hidden group hover:border-gold/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-cream-muted/70 font-semibold">
+                      Product Views
+                    </span>
+                    <div className="p-2 rounded-lg bg-gold/10 text-gold border border-gold/20">
+                      <Eye className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-heading font-black text-cream">
+                      {loadingAnalytics ? '...' : (analyticsData?.productViewsCount || 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs font-semibold text-gold font-mono">
+                      Keychains
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-cream-muted/50">
+                    Opened keychain details & photo gallery
+                  </p>
+                </div>
+
+                {/* 3. Buy Intent (Buy Now + Cart) */}
+                <div className="p-5 rounded-xl bg-charcoal border border-charcoal-light relative overflow-hidden group hover:border-gold/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-cream-muted/70 font-semibold">
+                      Buy Intent Clicks
+                    </span>
+                    <div className="p-2 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      <Zap className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-heading font-black text-cream">
+                      {loadingAnalytics ? '...' : (analyticsData?.checkoutIntentCount || 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs font-semibold text-amber-400">
+                      {analyticsData?.buyNowCount || 0} Buy Now
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-cream-muted/50">
+                    {analyticsData?.addToCartCount || 0} added to regular cart
+                  </p>
+                </div>
+
+                {/* 4. Checkout Starts (Step 1) */}
+                <div className="p-5 rounded-xl bg-charcoal border border-charcoal-light relative overflow-hidden group hover:border-gold/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-cream-muted/70 font-semibold">
+                      Checkout Step 1
+                    </span>
+                    <div className="p-2 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                      <MousePointerClick className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-heading font-black text-cream">
+                      {loadingAnalytics ? '...' : (analyticsData?.step1Count || 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs font-semibold text-purple-300">
+                      Address
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-cream-muted/50">
+                    {analyticsData?.step2Count || 0} moved to Step 2 Payment
+                  </p>
+                </div>
+
+                {/* 5. Conversion Rate */}
+                <div className="p-5 rounded-xl bg-charcoal border border-charcoal-light relative overflow-hidden group hover:border-gold/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider text-cream-muted/70 font-semibold">
+                      Conversion Rate
+                    </span>
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-baseline gap-2">
+                    <span className="text-2xl font-heading font-black text-cream">
+                      {loadingAnalytics ? '...' : `${analyticsData?.conversionRate || '0.0'}%`}
+                    </span>
+                    <span className="text-xs font-semibold text-emerald-400">
+                      {analyticsData?.completedOrdersCount || 0} orders
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-cream-muted/50">
+                    Visitors who converted into paying customers
+                  </p>
+                </div>
+              </div>
+
+              {/* Visual Checkout Drop-Off Funnel */}
+              <div className="p-6 rounded-2xl bg-charcoal/80 border border-charcoal-light/80">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-heading text-lg font-bold text-cream flex items-center gap-2">
+                      <span>Customer Checkout Drop-Off Funnel</span>
+                      <span className="text-xs font-normal text-cream-muted/60">({analyticsTimeRange.toUpperCase()})</span>
+                    </h3>
+                    <p className="mt-0.5 text-xs text-cream-muted/70">
+                      Shows where customers navigate and precisely where they drop off before finishing payment.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stepped Funnel Bars */}
+                <div className="space-y-4">
+                  {(analyticsData?.funnel || []).map((step, idx) => {
+                    const pct = step.pctOfTotal || 0
+                    return (
+                      <div key={step.id} className="p-3.5 rounded-xl bg-obsidian/60 border border-charcoal-light/60">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-cream text-sm">{step.name}</span>
+                            <span className="text-cream-muted/50 hidden sm:inline">· {step.subtext}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-heading font-black text-gold text-sm">
+                              {step.count.toLocaleString()}
+                            </span>
+                            <span className="px-2 py-0.5 rounded font-mono font-bold text-[11px] bg-charcoal-light text-cream">
+                              {pct}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="w-full h-2.5 rounded-full bg-charcoal-light/60 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-gold via-amber-400 to-emerald-400 transition-all duration-500 ease-out"
+                            style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Automated Funnel Drop-off Insight Callout */}
+                <div className="mt-6 p-4 rounded-xl border border-gold/20 bg-gold/5 flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-gold shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-bold text-cream">
+                      Automated Funnel Optimization Insight:
+                    </p>
+                    <p className="text-cream-muted/80 leading-relaxed">
+                      {analyticsData?.totalVisitors === 0 ? (
+                        'No visitor traffic recorded yet for this timeframe. Visit the store or share your links to start logging live funnel data.'
+                      ) : (analyticsData?.step1Count || 0) > (analyticsData?.step2Count || 0) * 2 ? (
+                        'Significant drop-off between Address (Step 1) and Payment (Step 2). Consider checking if customers find address entry cumbersome or are looking for auto-fill.'
+                      ) : (analyticsData?.buyNowCount || 0) > (analyticsData?.completedOrdersCount || 0) * 3 ? (
+                        'Strong buy intent detected with active Buy Now clicks! Customers are motivated by the ₹299 price point. Our instant ₹30 Online Discount callout encourages them to complete checkout.'
+                      ) : (
+                        'Your visitor-to-checkout conversion funnel is healthy. Direct Buy Now allows zero-friction 3-step checkout for single products.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Two-Column Grid: Top Viewed Keychains Leaderboard + Live Activity Feed */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Column 1 (7 cols): Top Viewed Keychains Leaderboard */}
+                <div className="lg:col-span-7 p-6 rounded-2xl bg-charcoal/80 border border-charcoal-light/80">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-heading text-base font-bold text-cream">
+                        Most Popular Keychains (Leaderboard)
+                      </h3>
+                      <p className="text-xs text-cream-muted/60">
+                        Ranked by customer product page views & buy clicks
+                      </p>
+                    </div>
+                  </div>
+
+                  {(!analyticsData?.topProducts || analyticsData.topProducts.length === 0) ? (
+                    <div className="text-center py-12 text-cream-muted/50 text-xs">
+                      <ShoppingBag className="w-8 h-8 mx-auto mb-2 opacity-30 text-gold" />
+                      No keychain views logged in this timeframe yet.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-charcoal-light/40 overflow-hidden">
+                      {analyticsData.topProducts.slice(0, 8).map((prod, idx) => {
+                        const intentRate = prod.views > 0 ? Math.round((prod.buyNow / prod.views) * 100) : 0
+                        return (
+                          <div key={prod.name} className="py-3 flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
+                                idx === 0 ? 'bg-gold text-obsidian' :
+                                idx === 1 ? 'bg-zinc-300 text-obsidian' :
+                                idx === 2 ? 'bg-amber-700 text-cream' :
+                                'bg-charcoal-light text-cream-muted'
+                              }`}>
+                                {idx + 1}
+                              </span>
+                              <span className="font-semibold text-cream truncate">
+                                {prod.name}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-4 shrink-0 text-right font-mono">
+                              <div>
+                                <span className="text-cream block font-bold">{prod.views}</span>
+                                <span className="text-[10px] text-cream-muted/50 uppercase">Views</span>
+                              </div>
+                              <div>
+                                <span className="text-gold block font-bold">{prod.buyNow}</span>
+                                <span className="text-[10px] text-gold/60 uppercase">Buy Now</span>
+                              </div>
+                              <div className="hidden sm:block">
+                                <span className="text-emerald-400 block font-bold">{intentRate}%</span>
+                                <span className="text-[10px] text-emerald-500/60 uppercase">Intent</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Column 2 (5 cols): Live Real-time Activity Feed */}
+                <div className="lg:col-span-5 p-6 rounded-2xl bg-charcoal/80 border border-charcoal-light/80 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-heading text-base font-bold text-cream">
+                        Live Visitor Activity Stream
+                      </h3>
+                      <span className="text-[10px] text-emerald-400 font-mono">Real-time</span>
+                    </div>
+
+                    {(!analyticsData?.recentEvents || analyticsData.recentEvents.length === 0) ? (
+                      <div className="text-center py-12 text-cream-muted/50 text-xs">
+                        <Clock className="w-8 h-8 mx-auto mb-2 opacity-30 text-cream-muted" />
+                        Awaiting incoming live visitor events...
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-[360px] overflow-y-auto custom-scrollbar pr-1">
+                        {analyticsData.recentEvents.slice(0, 12).map((ev) => {
+                          const evName = ev.event_name
+                          const timeStr = new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          const isBuy = evName === 'buy_now' || evName === 'order_completed'
+                          const isCheckout = evName.startsWith('checkout_')
+
+                          return (
+                            <div
+                              key={ev.id}
+                              className="p-2.5 rounded-lg bg-obsidian/60 border border-charcoal-light/40 flex items-center justify-between text-xs"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                  evName === 'order_completed' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                  evName === 'buy_now' ? 'bg-gold/20 text-gold border border-gold/30' :
+                                  isCheckout ? 'bg-purple-500/20 text-purple-300' :
+                                  'bg-charcoal-light text-cream-muted'
+                                }`}>
+                                  {evName.replace('checkout_', '').replace('_', ' ')}
+                                </span>
+                                <span className="text-cream/90 truncate text-[11px]">
+                                  {ev.product_name || ev.page_path || 'Store visit'}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-cream-muted/50 font-mono shrink-0 ml-2">
+                                {timeStr}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Deep Dive Clarity Replays Link */}
+                  <div className="mt-6 pt-4 border-t border-charcoal-light/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-cream-muted/60">Want full video recordings?</span>
+                      <a
+                        href="https://clarity.microsoft.com/projects/view/yi222tnscr/recordings"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-gold hover:underline"
+                      >
+                        <span>Open Clarity Replays</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     </div>
                   </div>
                 </div>
