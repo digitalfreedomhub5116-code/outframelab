@@ -69,10 +69,11 @@ const loadInitialProducts = () => {
             reviewCount: Number(p.reviewCount) || mock?.reviewCount || fallbackReviews.length || 12,
             discountBadge: p.discountBadge || mock?.discountBadge || '-50%',
             discountPercent: p.discountPercent || mock?.discountPercent || 50,
+            isBestseller: mock?.isBestseller ?? (Number(p.id) === 1 || Number(p.id) === 4),
             inStock: p.inStock !== false,
             isHidden: p.isHidden === true,
           }
-        })
+        }).sort((a, b) => Number(a.id) - Number(b.id))
       }
     }
   } catch (e) {
@@ -131,10 +132,11 @@ export const useCartStore = create((set, get) => ({
         reviewCount: Number(p.reviewCount) || mock?.reviewCount || fallbackReviews.length || 12,
         discountBadge: p.discountBadge || mock?.discountBadge || '-50%',
         discountPercent: p.discountPercent || mock?.discountPercent || 50,
+        isBestseller: mock?.isBestseller ?? (Number(p.id) === 1 || Number(p.id) === 4),
         inStock: p.inStock !== false,
         isHidden: p.isHidden === true,
       }
-    })
+    }).sort((a, b) => Number(a.id) - Number(b.id))
 
     // Also update current items and wishlist so they immediately adopt the authentic images
     const currentItems = get().items || []

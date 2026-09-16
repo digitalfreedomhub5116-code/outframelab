@@ -159,8 +159,10 @@ export async function getProducts(options = {}) {
             durability: 'Durable Impact Resistant Structure',
             discountBadge: mock?.discountBadge || '-50%',
             discountPercent: mock?.discountPercent || 50,
+            isBestseller: mock?.isBestseller ?? (Number(row.id) === 1 || Number(row.id) === 4),
           }
         })
+        mapped.sort((a, b) => Number(a.id) - Number(b.id))
         // Update persistent local cache
         setLocalData(LOCAL_STORAGE_PRODUCTS_KEY, mapped)
         return mapped
