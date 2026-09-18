@@ -125,6 +125,22 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Synchronize on mount to ensure Buy Now items and step 1 are guaranteed
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('outframe_buy_now_item')
+      if (raw) {
+        setBuyNowItem(JSON.parse(raw))
+      }
+      const savedStep = Number(sessionStorage.getItem('outframe_checkout_step'))
+      if (savedStep >= 1 && savedStep <= 3) {
+        setCurrentStepState(savedStep)
+      } else {
+        setCurrentStepState(1)
+      }
+    } catch (e) {}
+  }, [])
+
   // Terminate checkout session completely and return to store
   const handleCancelCheckout = () => {
     try {
@@ -288,9 +304,11 @@ export default function CheckoutPage() {
         }
       } else {
         setSelectedAddressIdState(null)
+        setIsAddingNewAddress(true)
       }
     } catch (e) {
       console.warn('Failed to load user addresses:', e)
+      setIsAddingNewAddress(true)
     } finally {
       setAddressLoading(false)
     }

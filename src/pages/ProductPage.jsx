@@ -301,14 +301,6 @@ export default function ProductPage() {
     )
   )
 
-  const handleAddToCart = () => {
-    if (isOutOfStock) return
-    for (let i = 0; i < quantity; i++) {
-      addItem(product)
-    }
-    trackAddToCart(product, quantity)
-    openCart()
-  }
 
   const handleBuyNow = () => {
     if (isOutOfStock) return
@@ -325,10 +317,20 @@ export default function ProductPage() {
       genre: product.genre,
       isBuyNow: true,
     }
+
+    // Automatically add this product to the user's cart in the store
+    useCartStore.getState().setItems([buyNowPayload])
+
+    // Save in sessionStorage for single-product Direct Buy Now checkout session
     try {
       sessionStorage.setItem('outframe_buy_now_item', JSON.stringify(buyNowPayload))
       sessionStorage.setItem('outframe_checkout_step', '1')
     } catch (e) {}
+
+    // Close any open side drawers
+    useCartStore.getState().closeCart()
+
+    // Redirect directly to the 1st step of checkout (address filling)
     navigate('/checkout')
   }
 
@@ -683,60 +685,46 @@ export default function ProductPage() {
                 </div>
               </div>
 
-              {/* Purchase Actions: Quantity + Add to Cart + BUY NOW */}
-              <div className="mt-4 space-y-2.5">
-                <div className="flex items-center gap-3">
-                  {/* Compact Quantity Stepper */}
-                  <div className="inline-flex items-center rounded-xl border border-charcoal-light bg-charcoal/80 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      disabled={quantity <= 1 || isOutOfStock}
-                      aria-label="Decrease quantity"
-                      className="h-9 w-9 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-obsidian/60 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
-                    >
-                      <Minus className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="w-9 text-center font-heading font-extrabold text-cream text-sm">
-                      {quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((q) => Math.min(10, q + 1))}
-                      disabled={quantity >= 10 || isOutOfStock}
-                      aria-label="Increase quantity"
-                      className="h-9 w-9 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-obsidian/60 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Secondary ADD TO CART Button */}
+              {/* Purchase Action: Quantity Stepper + Direct BUY NOW */}
+              <div className="mt-5 flex items-center gap-3">
+                {/* Quantity Stepper */}
+                <div className="inline-flex items-center rounded-xl border border-charcoal-light bg-charcoal/90 p-1 shrink-0">
                   <button
-                    onClick={handleAddToCart}
-                    disabled={isOutOfStock}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-bold uppercase tracking-wider transition-all border border-gold/50 text-gold hover:bg-gold/10 active:scale-[0.99] cursor-pointer bg-charcoal/50 ${
-                      isOutOfStock ? 'opacity-40 cursor-not-allowed' : ''
-                    }`}
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1 || isOutOfStock}
+                    aria-label="Decrease quantity"
+                    className="h-11 w-11 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-obsidian/80 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
                   >
-                    <ShoppingBag className="h-4 w-4" />
-                    <span>Add to Cart</span>
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <span className="w-10 text-center font-heading font-extrabold text-cream text-base">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity((q) => Math.min(10, q + 1))}
+                    disabled={quantity >= 10 || isOutOfStock}
+                    aria-label="Increase quantity"
+                    className="h-11 w-11 rounded-lg flex items-center justify-center text-cream hover:text-gold hover:bg-obsidian/80 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
                   </button>
                 </div>
 
-                {/* Primary BUY IT NOW Button */}
+                {/* Direct BUY NOW Button */}
                 <button
                   onClick={handleBuyNow}
                   disabled={isOutOfStock}
-                  className={`w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-extrabold uppercase tracking-wider transition-all shadow-lg shadow-gold/20 hover:shadow-gold/35 hover:brightness-105 active:scale-[0.99] cursor-pointer ${
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3.5 px-6 text-sm sm:text-base font-extrabold uppercase tracking-wider transition-all shadow-lg shadow-gold/25 hover:shadow-gold/40 hover:brightness-105 active:scale-[0.99] cursor-pointer ${
                     isOutOfStock
                       ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
                       : 'bg-gradient-to-r from-gold via-amber-400 to-gold text-obsidian'
                   }`}
                 >
-                  <Zap className="h-4 w-4 fill-obsidian text-obsidian" />
-                  <span>
-                    {isOutOfStock ? 'Out of Stock' : `BUY IT NOW · ₹${Number(product.price || 299) * quantity}`}
+                  <Zap className="h-5 w-5 fill-obsidian text-obsidian shrink-0" />
+                  <span className="truncate">
+                    {isOutOfStock ? 'Out of Stock' : `BUY NOW · ₹${Number(product.price || 299) * quantity}`}
                   </span>
                 </button>
               </div>
@@ -944,9 +932,9 @@ export default function ProductPage() {
         )}
       </div>
 
-      {/* Sticky Bottom Dual Action Bar for Mobile */}
-      <div className="fixed bottom-0 inset-x-0 z-50 sm:hidden border-t border-gold/25 bg-obsidian/95 backdrop-blur-xl px-3.5 py-2.5 shadow-2xl shadow-black">
-        <div className="flex items-center justify-between gap-2.5">
+      {/* Sticky Bottom Direct Action Bar for Mobile */}
+      <div className="fixed bottom-0 inset-x-0 z-50 sm:hidden border-t border-gold/25 bg-obsidian/95 backdrop-blur-xl px-4 py-3 shadow-2xl shadow-black">
+        <div className="flex items-center justify-between gap-3">
           <div className="shrink-0">
             <div className="flex items-baseline gap-1.5 flex-nowrap">
               <span className="font-heading text-lg font-extrabold text-gold">
@@ -962,29 +950,17 @@ export default function ProductPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-            {/* Add to Cart button (compact) */}
-            <button
-              onClick={handleAddToCart}
-              disabled={isOutOfStock}
-              aria-label="Add to Cart"
-              className={`p-2.5 rounded-xl border border-gold/40 text-gold bg-charcoal/70 active:scale-95 transition-all shrink-0 ${
-                isOutOfStock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gold/10'
-              }`}
-            >
-              <ShoppingBag className="h-4 w-4" />
-            </button>
-
-            {/* BUY NOW Button (Primary) */}
+            {/* Direct BUY NOW Button (Full Width Mobile Action) */}
             <button
               onClick={handleBuyNow}
               disabled={isOutOfStock}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 px-3 text-xs font-extrabold uppercase tracking-wider transition-all truncate ${
+              className={`w-full flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-xs font-extrabold uppercase tracking-wider transition-all truncate cursor-pointer ${
                 isOutOfStock
                   ? 'bg-charcoal-light/60 text-cream-muted/50 border border-charcoal-light/80 cursor-not-allowed'
                   : 'bg-gradient-to-r from-gold via-amber-400 to-gold text-obsidian shadow-lg shadow-gold/30 active:scale-95'
               }`}
             >
-              <Zap className="h-3.5 w-3.5 fill-obsidian text-obsidian shrink-0" />
+              <Zap className="h-4 w-4 fill-obsidian text-obsidian shrink-0" />
               <span className="truncate">{isOutOfStock ? 'Sold Out' : 'BUY NOW'}</span>
             </button>
           </div>
